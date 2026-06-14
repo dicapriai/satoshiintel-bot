@@ -38,7 +38,6 @@ logger = logging.getLogger(__name__)
 # Crea tu bot con @BotFather y pon el token en la variable de entorno
 # TELEGRAM_BOT_TOKEN, o pégalo abajo.
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "8572830161").split(",") if x.strip()]
 
 SATS_PER_BTC = 100_000_000
 # ─── Donaciones (xpub PÚBLICA desde variable de entorno; el repo es público) ────

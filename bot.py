@@ -20,6 +20,7 @@ import content_edu_a, content_edu_b, content_edu_c, content_edu_d
 import content_quotes
 import content_dict_a, content_dict_b, content_dict_c, content_dict_d, content_dict_e
 import content_quiz
+import addr_utils
 
 try:
     from dotenv import load_dotenv
@@ -67,7 +68,8 @@ _height_cache = {"height": None, "ts": 0.0}
     BIP39_INPUT,
     QUIZ,
     EXPLORER_INPUT,
-) = range(14)
+    ADDRTYPE_INPUT,
+) = range(15)
 
 # ─── Registro de educación (carga dinámica) ────────────────────────────────────
 EDU_CATS = [content_edu_a, content_edu_b, content_edu_c, content_edu_d]
@@ -285,6 +287,7 @@ def tools_keyboard(lg):
             [InlineKeyboardButton("⏳ Cuenta regresiva al halving", callback_data="halving")],
             [InlineKeyboardButton("🌐 Mempool en vivo", callback_data="mempool")],
             [InlineKeyboardButton("🔎 Explorador de TX / dirección", callback_data="explorer")],
+            [InlineKeyboardButton("🏷️ ¿Qué tipo de dirección es?", callback_data="addrtype")],
             [InlineKeyboardButton("🧮 ¿UTXO gastable o polvo?", callback_data="utxo")],
             [InlineKeyboardButton("🔙 Menú Principal", callback_data="back_main")],
         ]
@@ -300,6 +303,7 @@ def tools_keyboard(lg):
             [InlineKeyboardButton("⏳ Halving countdown", callback_data="halving")],
             [InlineKeyboardButton("🌐 Live Mempool", callback_data="mempool")],
             [InlineKeyboardButton("🔎 TX / address explorer", callback_data="explorer")],
+            [InlineKeyboardButton("🏷️ What address type is it?", callback_data="addrtype")],
             [InlineKeyboardButton("🧮 UTXO spendable or dust?", callback_data="utxo")],
             [InlineKeyboardButton("🔙 Main Menu", callback_data="back_main")],
         ]
@@ -906,6 +910,14 @@ async def tools_menu_callback(update, context):
                "(bc1.../1.../3...) and I'll show its info:")
         await edit_md(query, msg, tools_back_keyboard(lg))
         return EXPLORER_INPUT
+    if data == "addrtype":
+        msg = ("🏷️ *¿Qué tipo de dirección es?*\n\nPega una dirección Bitcoin "
+               "(bc1.../1.../3...) y te digo qué tipo es y qué significa:"
+               if lg == "es" else
+               "🏷️ *What address type is it?*\n\nPaste a Bitcoin address "
+               "(bc1.../1.../3...) and I'll tell you its type and what it means:")
+        await edit_md(query, msg, tools_back_keyboard(lg))
+        return ADDRTYPE_INPUT
     if data in TOOL_FLOWS:
         return await start_flow(query, context, data, lg)
     return TOOLS_MENU
@@ -1390,17 +1402,37 @@ async def lookup_address(addr, lg):
     spent = cs.get("spent_txo_sum", 0) + ms.get("spent_txo_sum", 0)
     balance = funded - spent
     txcount = cs.get("tx_count", 0) + ms.get("tx_count", 0)
+    tkey = addr_utils.detect_address_type(addr)
+    tline = (f"🏷️ Tipo: *{addr_utils.addr_type_short(tkey, lg)}*\n" if tkey else "")
     if lg == "es":
         return ("🔎 *Dirección*\n\n"
+                f"{tline}"
                 f"💰 Saldo: *{fmt_sats(balance)} sats* ({fmt_btc(balance/SATS_PER_BTC)} BTC)\n"
                 f"📥 Recibido total: {fmt_sats(funded)} sats\n"
                 f"📤 Enviado total: {fmt_sats(spent)} sats\n"
                 f"🔁 Transacciones: {txcount:,}\n\n_Datos de mempool.space._")
     return ("🔎 *Address*\n\n"
+            f"{tline}"
             f"💰 Balance: *{fmt_sats(balance)} sats* ({fmt_btc(balance/SATS_PER_BTC)} BTC)\n"
             f"📥 Total received: {fmt_sats(funded)} sats\n"
             f"📤 Total sent: {fmt_sats(spent)} sats\n"
             f"🔁 Transactions: {txcount:,}\n\n_Data from mempool.space._")
+
+
+async def addrtype_input(update, context):
+    lg = lang(context)
+    addr = update.message.text.strip()
+    key = addr_utils.detect_address_type(addr)
+    if not key:
+        msg = ("❌ Esa no parece una dirección Bitcoin válida. Revisa que esté bien "
+               "copiada (bc1.../1.../3...)." if lg == "es" else
+               "❌ That doesn't look like a valid Bitcoin address. Check it's copied "
+               "correctly (bc1.../1.../3...).")
+        await reply_md(update, msg, tools_back_keyboard(lg))
+        return ADDRTYPE_INPUT
+    header = "✅ *Dirección válida*\n\n" if lg == "es" else "✅ *Valid address*\n\n"
+    await reply_md(update, header + addr_utils.addr_type_card(key, lg), tools_keyboard(lg))
+    return TOOLS_MENU
 
 
 # ─── Donaciones (deriva dirección nueva desde la xpub pública) ───────────────────
@@ -1596,6 +1628,10 @@ def main():
             EXPLORER_INPUT: [
                 CallbackQueryHandler(tools_menu_callback),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, explorer_input),
+            ],
+            ADDRTYPE_INPUT: [
+                CallbackQueryHandler(tools_menu_callback),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, addrtype_input),
             ],
         },
         fallbacks=[CommandHandler("cancel", cancel), CommandHandler("menu", menu_command)],

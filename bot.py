@@ -45,6 +45,10 @@ SATS_PER_BTC = 100_000_000
 DONATION_XPUB = os.environ.get("DONATION_XPUB", "")
 DONATION_POOL = 20          # rota entre 20 direcciones (dentro del gap limit de Sparrow)
 _donation_counter = 0
+# ─── Canal y soporte ────────────────────────────────────────────────────────────
+CHANNEL_URL = "https://t.me/SatoshiIntel"
+CHANNEL_HANDLE = "@SatoshiIntel"
+SUPPORT_EMAIL = "SatoshiIntelbot@proton.me"
 HALVING_INTERVAL = 210_000
 BLOCK_MINUTES = 10
 PRICE_CACHE_TTL = 60
@@ -257,6 +261,8 @@ def main_menu_keyboard(lg):
             [InlineKeyboardButton("💰 Precio de Bitcoin ahora", callback_data="price_now")],
             [InlineKeyboardButton("💬 Cita del día", callback_data="cita")],
             [InlineKeyboardButton("🧡 Apoya el proyecto", callback_data="donate")],
+            [InlineKeyboardButton("📢 Únete al canal", url=CHANNEL_URL)],
+            [InlineKeyboardButton("📧 Soporte", callback_data="support")],
             [InlineKeyboardButton("🌎 Cambiar idioma", callback_data="change_lang")],
         ]
     else:
@@ -269,6 +275,8 @@ def main_menu_keyboard(lg):
             [InlineKeyboardButton("💰 Bitcoin Price Now", callback_data="price_now")],
             [InlineKeyboardButton("💬 Quote of the day", callback_data="cita")],
             [InlineKeyboardButton("🧡 Support the project", callback_data="donate")],
+            [InlineKeyboardButton("📢 Join our channel", url=CHANNEL_URL)],
+            [InlineKeyboardButton("📧 Support", callback_data="support")],
             [InlineKeyboardButton("🌎 Change language", callback_data="change_lang")],
         ]
     return InlineKeyboardMarkup(rows)
@@ -414,6 +422,22 @@ def cita_text(lg):
     return f"{header}\n\n_{body}_\n\n— {q['author']}"
 
 
+def support_text(lg):
+    if lg == "es":
+        return ("📧 *Soporte y contacto*\n\n"
+                "¿Dudas, ideas o algún problema? Escríbenos:\n\n"
+                f"`{SUPPORT_EMAIL}`\n\n"
+                f"📢 Síguenos en el canal: {CHANNEL_HANDLE}\n\n"
+                "¡Gracias por usar SatoshiIntel! 🟠\n"
+                "_No confíes, verifica._")
+    return ("📧 *Support & contact*\n\n"
+            "Questions, ideas or a problem? Write to us:\n\n"
+            f"`{SUPPORT_EMAIL}`\n\n"
+            f"📢 Follow our channel: {CHANNEL_HANDLE}\n\n"
+            "Thanks for using SatoshiIntel! 🟠\n"
+            "_Don't trust, verify._")
+
+
 # ─── Menú principal ─────────────────────────────────────────────────────────────
 async def main_menu_callback(update, context):
     query = update.callback_query
@@ -439,6 +463,9 @@ async def main_menu_callback(update, context):
         return await start_quiz(query, context, lg)
     if data == "donate":
         return await send_donation(query, lg)
+    if data == "support":
+        await edit_md(query, support_text(lg), main_menu_keyboard(lg))
+        return MAIN_MENU
     if data == "price_now":
         price = await get_btc_price()
         await edit_md(query, price_text(lg, price), main_menu_keyboard(lg))

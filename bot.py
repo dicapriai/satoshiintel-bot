@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import os
+import io
+import re
 import logging
 import time
 import random
 import httpx
+import qrcode
+from bip_utils import Bip32Slip10Secp256k1, P2WPKHAddr
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import (
@@ -36,6 +40,10 @@ TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "8572830161").split(",") if x.strip()]
 
 SATS_PER_BTC = 100_000_000
+# ─── Donaciones (xpub PÚBLICA desde variable de entorno; el repo es público) ────
+DONATION_XPUB = os.environ.get("DONATION_XPUB", "")
+DONATION_POOL = 20          # rota entre 20 direcciones (dentro del gap limit de Sparrow)
+_donation_counter = 0
 HALVING_INTERVAL = 210_000
 BLOCK_MINUTES = 10
 PRICE_CACHE_TTL = 60
@@ -58,7 +66,8 @@ _height_cache = {"height": None, "ts": 0.0}
     BIP39_MENU,
     BIP39_INPUT,
     QUIZ,
-) = range(13)
+    EXPLORER_INPUT,
+) = range(14)
 
 # ─── Registro de educación (carga dinámica) ────────────────────────────────────
 EDU_CATS = [content_edu_a, content_edu_b, content_edu_c, content_edu_d]
@@ -245,6 +254,7 @@ def main_menu_keyboard(lg):
             [InlineKeyboardButton("🔤 Lista BIP39", callback_data="bip39")],
             [InlineKeyboardButton("💰 Precio de Bitcoin ahora", callback_data="price_now")],
             [InlineKeyboardButton("💬 Cita del día", callback_data="cita")],
+            [InlineKeyboardButton("🧡 Apoya el proyecto", callback_data="donate")],
             [InlineKeyboardButton("🌎 Cambiar idioma", callback_data="change_lang")],
         ]
     else:
@@ -256,6 +266,7 @@ def main_menu_keyboard(lg):
             [InlineKeyboardButton("🔤 BIP39 Wordlist", callback_data="bip39")],
             [InlineKeyboardButton("💰 Bitcoin Price Now", callback_data="price_now")],
             [InlineKeyboardButton("💬 Quote of the day", callback_data="cita")],
+            [InlineKeyboardButton("🧡 Support the project", callback_data="donate")],
             [InlineKeyboardButton("🌎 Change language", callback_data="change_lang")],
         ]
     return InlineKeyboardMarkup(rows)
@@ -273,7 +284,8 @@ def tools_keyboard(lg):
             [InlineKeyboardButton("🏖️ Retiro (ahorro futuro)", callback_data="retirement")],
             [InlineKeyboardButton("⏳ Cuenta regresiva al halving", callback_data="halving")],
             [InlineKeyboardButton("🌐 Mempool en vivo", callback_data="mempool")],
-            [InlineKeyboardButton("🚩 Detector de estafas", callback_data="scam")],
+            [InlineKeyboardButton("🔎 Explorador de TX / dirección", callback_data="explorer")],
+            [InlineKeyboardButton("🧮 ¿UTXO gastable o polvo?", callback_data="utxo")],
             [InlineKeyboardButton("🔙 Menú Principal", callback_data="back_main")],
         ]
     else:
@@ -287,7 +299,8 @@ def tools_keyboard(lg):
             [InlineKeyboardButton("🏖️ Retirement (future savings)", callback_data="retirement")],
             [InlineKeyboardButton("⏳ Halving countdown", callback_data="halving")],
             [InlineKeyboardButton("🌐 Live Mempool", callback_data="mempool")],
-            [InlineKeyboardButton("🚩 Scam detector", callback_data="scam")],
+            [InlineKeyboardButton("🔎 TX / address explorer", callback_data="explorer")],
+            [InlineKeyboardButton("🧮 UTXO spendable or dust?", callback_data="utxo")],
             [InlineKeyboardButton("🔙 Main Menu", callback_data="back_main")],
         ]
     return InlineKeyboardMarkup(rows)
@@ -331,9 +344,11 @@ def module_keyboard(cat_mod, lg):
 async def start(update, context):
     context.user_data.clear()
     await update.message.reply_text(
-        "₿ *¡Bienvenido a Bitcoin Bot! / Welcome to Bitcoin Bot!*\n\n"
-        "Aprende Bitcoin y usa la calculadora de precios.\n"
-        "Learn Bitcoin and use the price calculator.\n\n"
+        "₿ *Bienvenido a SatoshiIntel*\n"
+        "Tu guía Bitcoin de bolsillo.\n"
+        "Aprende, calcula y vuélvete soberano.\n"
+        "🔐 _No confíes, verifica._\n\n"
+        "🇬🇧 _Your pocket Bitcoin guide. Learn, calculate, become sovereign. Don't trust, verify._\n\n"
         "Elige tu idioma / Choose your language:",
         parse_mode="Markdown", reply_markup=lang_keyboard()
     )
@@ -418,6 +433,8 @@ async def main_menu_callback(update, context):
         return BIP39_MENU
     if data == "quiz":
         return await start_quiz(query, context, lg)
+    if data == "donate":
+        return await send_donation(query, lg)
     if data == "price_now":
         price = await get_btc_price()
         await edit_md(query, price_text(lg, price), main_menu_keyboard(lg))
@@ -515,6 +532,10 @@ TOOL_FLOWS = {
                   "For how many years? (e.g. 20):"),
         ("crecimiento", "¿Qué crecimiento anual esperas del precio de BTC en %? (ej. 20):",
                         "What annual BTC price growth do you expect in %? (e.g. 20):"),
+    ],
+    "utxo": [
+        ("sats", "🧮 *¿UTXO gastable o polvo?*\n\n¿Cuántos *sats* tiene ese pedacito de bitcoin? (ej. 1000):",
+                 "🧮 *UTXO spendable or dust?*\n\nHow many *sats* is that bitcoin chunk? (e.g. 1000):"),
     ],
 }
 
@@ -693,6 +714,43 @@ async def compute_tool(tool, d, lg):
                 f"Your stack would be ≈ *{fmt_usd(valor_futuro)}* 🤯\n\n"
                 "_Estimated projection, NOT financial advice. BTC is volatile._")
 
+    if tool == "utxo":
+        sats = d["sats"]
+        input_vb = 68  # tamaño típico de un input Native SegWit (vBytes)
+        fees, _ = await get_mempool_data()
+        rate = fees.get("fastestFee") if fees else None
+        breakeven = sats / input_vb  # comisión (sats/vByte) a la que mover cuesta = valor
+        if lg == "es":
+            txt = ("🧮 *¿UTXO gastable o polvo?*\n\n"
+                   f"Tu pedacito: *{fmt_sats(sats)} sats*\n"
+                   f"Mover un UTXO ocupa ~{input_vb} vBytes.\n\n"
+                   f"⚖️ Punto de equilibrio: si la comisión sube de *{breakeven:.1f} sats/vByte*, "
+                   "mover esto cuesta más de lo que vale.\n")
+            if rate is not None:
+                cost = input_vb * rate
+                if sats > cost:
+                    txt += (f"\n🟢 *Gastable ahora.* Comisión actual: {rate} sats/vByte → "
+                            f"mover cuesta ~{fmt_sats(cost)} sats (menos que su valor).")
+                else:
+                    txt += (f"\n🔴 *Es polvo ahora.* Comisión actual: {rate} sats/vByte → "
+                            f"mover cuesta ~{fmt_sats(cost)} sats (más que su valor).")
+            txt += "\n\n_Estimación con un input típico. Lo \"avanzado\" es el concepto, no el cálculo._"
+            return txt
+        txt = ("🧮 *UTXO spendable or dust?*\n\n"
+               f"Your chunk: *{fmt_sats(sats)} sats*\n"
+               f"Spending a UTXO takes ~{input_vb} vBytes.\n\n"
+               f"⚖️ Break-even: above *{breakeven:.1f} sats/vByte*, moving it costs more than it's worth.\n")
+        if rate is not None:
+            cost = input_vb * rate
+            if sats > cost:
+                txt += (f"\n🟢 *Spendable now.* Current fee: {rate} sats/vByte → "
+                        f"moving costs ~{fmt_sats(cost)} sats (less than its value).")
+            else:
+                txt += (f"\n🔴 *It's dust now.* Current fee: {rate} sats/vByte → "
+                        f"moving costs ~{fmt_sats(cost)} sats (more than its value).")
+        txt += "\n\n_Estimate with a typical input._"
+        return txt
+
     return "?"
 
 
@@ -840,8 +898,14 @@ async def tools_menu_callback(update, context):
     if data == "mempool":
         await edit_md(query, await mempool_text(lg), tools_keyboard(lg))
         return TOOLS_MENU
-    if data == "scam":
-        return await start_scam(query, context, lg)
+    if data == "explorer":
+        msg = ("🔎 *Explorador*\n\nPega un *TXID* (64 caracteres) o una *dirección* "
+               "Bitcoin (bc1.../1.../3...) y te muestro su info:"
+               if lg == "es" else
+               "🔎 *Explorer*\n\nPaste a *TXID* (64 chars) or a Bitcoin *address* "
+               "(bc1.../1.../3...) and I'll show its info:")
+        await edit_md(query, msg, tools_back_keyboard(lg))
+        return EXPLORER_INPUT
     if data in TOOL_FLOWS:
         return await start_flow(query, context, data, lg)
     return TOOLS_MENU
@@ -1255,6 +1319,154 @@ async def quiz_callback(update, context):
     return QUIZ
 
 
+# ─── Explorador de transacciones / direcciones ──────────────────────────────────
+async def explorer_input(update, context):
+    lg = lang(context)
+    q = update.message.text.strip()
+    if re.fullmatch(r"[0-9a-fA-F]{64}", q):
+        text = await lookup_tx(q, lg)
+    elif re.fullmatch(r"(bc1[a-z0-9]{8,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,39})", q):
+        text = await lookup_address(q, lg)
+    else:
+        text = ("❌ No reconozco eso. Pega un *TXID* (64 caracteres) o una *dirección* "
+                "(bc1.../1.../3...)." if lg == "es" else
+                "❌ Not recognized. Paste a *TXID* (64 chars) or an *address* (bc1.../1.../3...).")
+        await reply_md(update, text, tools_back_keyboard(lg))
+        return EXPLORER_INPUT
+    await reply_md(update, text, tools_keyboard(lg))
+    return TOOLS_MENU
+
+
+async def lookup_tx(txid, lg):
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.get(f"https://mempool.space/api/tx/{txid}")
+            if r.status_code == 404:
+                return "❌ No encontré esa transacción." if lg == "es" else "❌ Transaction not found."
+            r.raise_for_status()
+            d = r.json()
+    except Exception:
+        return "⚠️ Error consultando la red. Intenta de nuevo." if lg == "es" else "⚠️ Network error. Try again."
+    st = d.get("status", {})
+    fee = d.get("fee", 0)
+    vsize = d.get("vsize") or d.get("size") or 1
+    total_out = sum(v.get("value", 0) for v in d.get("vout", []))
+    feerate = fee / vsize if vsize else 0
+    if st.get("confirmed"):
+        bh = st.get("block_height")
+        tip = await get_block_height()
+        confs = (tip - bh + 1) if (tip and bh) else "?"
+        estado_es = f"🟢 Confirmada ({confs} confirmaciones)\nBloque: {bh:,}"
+        estado_en = f"🟢 Confirmed ({confs} confirmations)\nBlock: {bh:,}"
+    else:
+        estado_es = "🟡 Pendiente (en el mempool)"
+        estado_en = "🟡 Pending (in the mempool)"
+    if lg == "es":
+        return ("🔎 *Transacción*\n\n"
+                f"{estado_es}\n\n"
+                f"💰 Monto total: *{fmt_sats(total_out)} sats* ({fmt_btc(total_out/SATS_PER_BTC)} BTC)\n"
+                f"💸 Comisión: *{fmt_sats(fee)} sats* ({feerate:.1f} sats/vByte)\n"
+                f"📏 Tamaño: {vsize:,} vBytes\n\n_Datos de mempool.space._")
+    return ("🔎 *Transaction*\n\n"
+            f"{estado_en}\n\n"
+            f"💰 Total amount: *{fmt_sats(total_out)} sats* ({fmt_btc(total_out/SATS_PER_BTC)} BTC)\n"
+            f"💸 Fee: *{fmt_sats(fee)} sats* ({feerate:.1f} sats/vByte)\n"
+            f"📏 Size: {vsize:,} vBytes\n\n_Data from mempool.space._")
+
+
+async def lookup_address(addr, lg):
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.get(f"https://mempool.space/api/address/{addr}")
+            if r.status_code in (400, 404):
+                return "❌ Dirección no válida o sin datos." if lg == "es" else "❌ Invalid address or no data."
+            r.raise_for_status()
+            d = r.json()
+    except Exception:
+        return "⚠️ Error consultando la red. Intenta de nuevo." if lg == "es" else "⚠️ Network error. Try again."
+    cs = d.get("chain_stats", {})
+    ms = d.get("mempool_stats", {})
+    funded = cs.get("funded_txo_sum", 0) + ms.get("funded_txo_sum", 0)
+    spent = cs.get("spent_txo_sum", 0) + ms.get("spent_txo_sum", 0)
+    balance = funded - spent
+    txcount = cs.get("tx_count", 0) + ms.get("tx_count", 0)
+    if lg == "es":
+        return ("🔎 *Dirección*\n\n"
+                f"💰 Saldo: *{fmt_sats(balance)} sats* ({fmt_btc(balance/SATS_PER_BTC)} BTC)\n"
+                f"📥 Recibido total: {fmt_sats(funded)} sats\n"
+                f"📤 Enviado total: {fmt_sats(spent)} sats\n"
+                f"🔁 Transacciones: {txcount:,}\n\n_Datos de mempool.space._")
+    return ("🔎 *Address*\n\n"
+            f"💰 Balance: *{fmt_sats(balance)} sats* ({fmt_btc(balance/SATS_PER_BTC)} BTC)\n"
+            f"📥 Total received: {fmt_sats(funded)} sats\n"
+            f"📤 Total sent: {fmt_sats(spent)} sats\n"
+            f"🔁 Transactions: {txcount:,}\n\n_Data from mempool.space._")
+
+
+# ─── Donaciones (deriva dirección nueva desde la xpub pública) ───────────────────
+def derive_donation_address(index):
+    node = Bip32Slip10Secp256k1.FromExtendedKey(DONATION_XPUB)
+    pk = node.DerivePath(f"0/{index}").PublicKey().KeyObject()
+    return P2WPKHAddr.EncodeKey(pk, hrp="bc", wit_ver=0)
+
+
+def next_donation_address():
+    global _donation_counter
+    idx = _donation_counter % DONATION_POOL
+    _donation_counter += 1
+    return derive_donation_address(idx)
+
+
+def make_qr_png(data):
+    img = qrcode.make(data)
+    bio = io.BytesIO()
+    bio.name = "donacion.png"
+    img.save(bio, "PNG")
+    bio.seek(0)
+    return bio
+
+
+def donation_caption(lg, addr):
+    if lg == "es":
+        return ("🧡 *Apoya SatoshiIntel*\n\n"
+                "Escanea este QR con tu wallet para donar en Bitcoin (on-chain), "
+                "o copia la dirección:\n\n"
+                f"`{addr}`\n\n"
+                "Cada donación usa una dirección distinta para tu privacidad. "
+                "¡Gracias por apoyar el proyecto! 🟠\n\n"
+                "_No confíes, verifica._")
+    return ("🧡 *Support SatoshiIntel*\n\n"
+            "Scan this QR with your wallet to donate in Bitcoin (on-chain), "
+            "or copy the address:\n\n"
+            f"`{addr}`\n\n"
+            "Each donation uses a different address for your privacy. "
+            "Thanks for supporting the project! 🟠\n\n"
+            "_Don't trust, verify._")
+
+
+async def send_donation(query, lg):
+    if not DONATION_XPUB:
+        msg = ("🧡 Las donaciones aún no están configuradas. Vuelve pronto."
+               if lg == "es" else "🧡 Donations aren't set up yet. Check back soon.")
+        await edit_md(query, msg, main_menu_keyboard(lg))
+        return MAIN_MENU
+    try:
+        addr = next_donation_address()
+        qr = make_qr_png(f"bitcoin:{addr}")
+    except Exception as e:
+        logger.warning("donación: %s", e)
+        msg = ("⚠️ No pude generar la dirección. Intenta de nuevo."
+               if lg == "es" else "⚠️ Couldn't generate the address. Try again.")
+        await edit_md(query, msg, main_menu_keyboard(lg))
+        return MAIN_MENU
+    try:
+        await query.message.reply_photo(photo=qr, caption=donation_caption(lg, addr), parse_mode="Markdown")
+    except Exception:
+        await query.message.reply_text(donation_caption(lg, addr), parse_mode="Markdown")
+    await query.message.reply_text(main_title(lg), parse_mode="Markdown", reply_markup=main_menu_keyboard(lg))
+    return MAIN_MENU
+
+
 # ─── Comandos de atajo ──────────────────────────────────────────────────────────
 async def diccionario_command(update, context):
     lg = lang(context)
@@ -1318,7 +1530,16 @@ async def post_init(app):
     ]
     await app.bot.set_my_commands(es_cmds)
     await app.bot.set_my_commands(en_cmds, language_code="en")
-    logger.info("✅ Menú de comandos configurado en Telegram.")
+    # "About" del perfil (short description, máx 120 caracteres)
+    try:
+        await app.bot.set_my_short_description(
+            "₿ Creado para los que amamos Bitcoin. Educación y herramientas para volverte soberano. No confíes, verifica.")
+        await app.bot.set_my_short_description(
+            "₿ Built for those who love Bitcoin. Education and tools to become sovereign. Don't trust, verify.",
+            language_code="en")
+    except Exception as e:
+        logger.warning("No pude fijar el About: %s", e)
+    logger.info("✅ Menú de comandos y About configurados en Telegram.")
 
 
 # ─── main ───────────────────────────────────────────────────────────────────────
@@ -1372,6 +1593,10 @@ def main():
                 MessageHandler(filters.TEXT & ~filters.COMMAND, bip39_input),
             ],
             QUIZ: [CallbackQueryHandler(quiz_callback)],
+            EXPLORER_INPUT: [
+                CallbackQueryHandler(tools_menu_callback),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, explorer_input),
+            ],
         },
         fallbacks=[CommandHandler("cancel", cancel), CommandHandler("menu", menu_command)],
         allow_reentry=True,

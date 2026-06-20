@@ -86,7 +86,8 @@ _height_cache = {"height": None, "ts": 0.0}
     ADDRTYPE_INPUT,
     BROADCAST_COMPOSE,
     BROADCAST_CONFIRM,
-) = range(17)
+    ADMIN_MENU,
+) = range(18)
 
 # ─── Registro de educación (carga dinámica) ────────────────────────────────────
 EDU_CATS = [content_edu_a, content_edu_b, content_edu_c, content_edu_d]
@@ -263,7 +264,7 @@ def lang_keyboard():
     ]])
 
 
-def main_menu_keyboard(lg):
+def main_menu_keyboard(lg, admin=False):
     if lg == "es":
         rows = [
             [InlineKeyboardButton("🧮 Herramientas", callback_data="tools")],
@@ -292,6 +293,9 @@ def main_menu_keyboard(lg):
             [InlineKeyboardButton("📧 Support", callback_data="support")],
             [InlineKeyboardButton("🌎 Change language", callback_data="change_lang")],
         ]
+    if admin:
+        label = "🎛️ Panel Admin" if lg == "es" else "🎛️ Admin Panel"
+        rows.insert(0, [InlineKeyboardButton(label, callback_data="admin_panel")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -385,7 +389,7 @@ async def lang_select(update, context):
     await query.answer()
     lg = "es" if query.data == "lang_es" else "en"
     context.user_data["lang"] = lg
-    await edit_md(query, main_title(lg), main_menu_keyboard(lg))
+    await edit_md(query, main_title(lg), main_menu_keyboard(lg, is_admin(update)))
     return MAIN_MENU
 
 
@@ -395,7 +399,7 @@ def main_title(lg):
 
 async def menu_command(update, context):
     lg = lang(context)
-    await update.message.reply_text(main_title(lg), parse_mode="Markdown", reply_markup=main_menu_keyboard(lg))
+    await update.message.reply_text(main_title(lg), parse_mode="Markdown", reply_markup=main_menu_keyboard(lg, is_admin(update)))
     return MAIN_MENU
 
 
@@ -407,7 +411,7 @@ async def idioma_command(update, context):
 async def precio_command(update, context):
     lg = lang(context)
     price = await get_btc_price()
-    await reply_md(update, price_text(lg, price), main_menu_keyboard(lg))
+    await reply_md(update, price_text(lg, price), main_menu_keyboard(lg, is_admin(update)))
     return MAIN_MENU
 
 
@@ -476,15 +480,18 @@ async def main_menu_callback(update, context):
         return await start_quiz(query, context, lg)
     if data == "donate":
         return await send_donation(query, lg)
+    if data == "admin_panel" and is_admin(update):
+        await edit_md(query, admin_panel_title(lg), admin_panel_keyboard(lg))
+        return ADMIN_MENU
     if data == "support":
-        await edit_md(query, support_text(lg), main_menu_keyboard(lg))
+        await edit_md(query, support_text(lg), main_menu_keyboard(lg, is_admin(update)))
         return MAIN_MENU
     if data == "price_now":
         price = await get_btc_price()
-        await edit_md(query, price_text(lg, price), main_menu_keyboard(lg))
+        await edit_md(query, price_text(lg, price), main_menu_keyboard(lg, is_admin(update)))
         return MAIN_MENU
     if data == "cita":
-        await edit_md(query, cita_text(lg), main_menu_keyboard(lg))
+        await edit_md(query, cita_text(lg), main_menu_keyboard(lg, is_admin(update)))
         return MAIN_MENU
     if data == "change_lang":
         await edit_md(query, "🌎 Elige tu idioma / Choose your language:", lang_keyboard())
@@ -493,7 +500,7 @@ async def main_menu_callback(update, context):
 
 
 async def show_main_menu(query, lg):
-    await edit_md(query, main_title(lg), main_menu_keyboard(lg))
+    await edit_md(query, main_title(lg), main_menu_keyboard(lg, is_admin(query)))
     return MAIN_MENU
 
 
@@ -604,7 +611,7 @@ async def tool_input(update, context):
     lg = lang(context)
     flow = context.user_data.get("flow")
     if not flow:
-        await reply_md(update, "Usa /menu", main_menu_keyboard(lg))
+        await reply_md(update, "Usa /menu", main_menu_keyboard(lg, is_admin(update)))
         return MAIN_MENU
 
     tool = flow["tool"]
@@ -1517,10 +1524,11 @@ def donation_caption(lg, addr):
 
 
 async def send_donation(query, lg):
+    adm = is_admin(query)
     if not DONATION_XPUB:
         msg = ("🧡 Las donaciones aún no están configuradas. Vuelve pronto."
                if lg == "es" else "🧡 Donations aren't set up yet. Check back soon.")
-        await edit_md(query, msg, main_menu_keyboard(lg))
+        await edit_md(query, msg, main_menu_keyboard(lg, adm))
         return MAIN_MENU
     try:
         addr = next_donation_address()
@@ -1529,13 +1537,14 @@ async def send_donation(query, lg):
         logger.warning("donación: %s", e)
         msg = ("⚠️ No pude generar la dirección. Intenta de nuevo."
                if lg == "es" else "⚠️ Couldn't generate the address. Try again.")
-        await edit_md(query, msg, main_menu_keyboard(lg))
+        await edit_md(query, msg, main_menu_keyboard(lg, adm))
         return MAIN_MENU
     try:
         await query.message.reply_photo(photo=qr, caption=donation_caption(lg, addr), parse_mode="Markdown")
     except Exception:
         await query.message.reply_text(donation_caption(lg, addr), parse_mode="Markdown")
-    await query.message.reply_text(main_title(lg), parse_mode="Markdown", reply_markup=main_menu_keyboard(lg))
+    await query.message.reply_text(main_title(lg), parse_mode="Markdown",
+                                   reply_markup=main_menu_keyboard(lg, adm))
     return MAIN_MENU
 
 
@@ -1609,8 +1618,8 @@ async def track_user(update, context):
 
 
 # ─── Admin: /broadcast y /stats ─────────────────────────────────────────────────
-def is_admin(update):
-    u = update.effective_user
+def is_admin(update_or_query):
+    u = getattr(update_or_query, "effective_user", None) or getattr(update_or_query, "from_user", None)
     return bool(u and u.id in ADMIN_IDS)
 
 
@@ -1768,6 +1777,91 @@ async def broadcast_cancel(update, context):
     return ConversationHandler.END
 
 
+# ─── Panel Admin (botones, solo visible para el admin) ──────────────────────────
+def admin_panel_title(lg):
+    return ("🎛️ *Panel Admin*\n\nElige una opción:" if lg == "es"
+            else "🎛️ *Admin Panel*\n\nChoose an option:")
+
+
+def admin_panel_keyboard(lg):
+    if lg == "es":
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("📊 Estadísticas", callback_data="admin_stats")],
+            [InlineKeyboardButton("👥 Ver usuarios", callback_data="admin_users")],
+            [InlineKeyboardButton("📢 Enviar broadcast", callback_data="admin_broadcast")],
+            [InlineKeyboardButton("🔙 Volver al menú", callback_data="back_main")],
+        ])
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📊 Statistics", callback_data="admin_stats")],
+        [InlineKeyboardButton("👥 View users", callback_data="admin_users")],
+        [InlineKeyboardButton("📢 Send broadcast", callback_data="admin_broadcast")],
+        [InlineKeyboardButton("🔙 Back to menu", callback_data="back_main")],
+    ])
+
+
+def admin_back_keyboard(lg):
+    label = "🔙 Panel Admin" if lg == "es" else "🔙 Admin Panel"
+    return InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data="admin_panel")]])
+
+
+async def admin_menu_callback(update, context):
+    query = update.callback_query
+    await query.answer()
+    lg = lang(context)
+    if not is_admin(update):
+        return await show_main_menu(query, lg)
+    data = query.data
+    if data == "back_main":
+        return await show_main_menu(query, lg)
+    if data == "admin_panel":
+        await edit_md(query, admin_panel_title(lg), admin_panel_keyboard(lg))
+        return ADMIN_MENU
+
+    pool = context.application.bot_data.get("db_pool")
+    if data == "admin_stats":
+        if not pool:
+            txt = "⚠️ Base de datos no configurada." if lg == "es" else "⚠️ Database not configured."
+        else:
+            try:
+                n = await count_users(pool)
+                txt = (f"📊 *Estadísticas*\n\n👥 Usuarios registrados: *{n}*" if lg == "es"
+                       else f"📊 *Statistics*\n\n👥 Registered users: *{n}*")
+            except Exception as e:
+                txt = f"⚠️ Error: {e}"
+        await edit_md(query, txt, admin_back_keyboard(lg))
+        return ADMIN_MENU
+
+    if data == "admin_users":
+        if not pool:
+            await query.edit_message_text("⚠️ Base de datos no configurada.",
+                                          reply_markup=admin_back_keyboard(lg))
+            return ADMIN_MENU
+        try:
+            total = await count_users(pool)
+            rows = await get_recent_users(pool, 20)
+        except Exception as e:
+            await query.edit_message_text(f"⚠️ Error: {e}", reply_markup=admin_back_keyboard(lg))
+            return ADMIN_MENU
+        lines = []
+        for i, r in enumerate(rows, 1):
+            who = ("@" + r["username"]) if r["username"] else (r["first_name"] or "—")
+            d = r["joined_at"].strftime("%d/%m/%y") if r["joined_at"] else "?"
+            lines.append(f"{i}. {who} — {d}")
+        body = "\n".join(lines) if lines else "(sin usuarios todavía)"
+        # Texto plano: los @username pueden tener guiones bajos.
+        await query.edit_message_text(
+            f"👥 Usuarios (últimos {len(rows)})\n\n{body}\n\nTotal: {total}",
+            reply_markup=admin_back_keyboard(lg))
+        return ADMIN_MENU
+
+    if data == "admin_broadcast":
+        await query.message.reply_text(
+            "📢 Mándame el mensaje que quieres enviar a todos (texto o foto).\n\n/cancel para abortar.")
+        return BROADCAST_COMPOSE
+
+    return ADMIN_MENU
+
+
 # ─── Comandos de atajo ──────────────────────────────────────────────────────────
 async def diccionario_command(update, context):
     lg = lang(context)
@@ -1923,6 +2017,7 @@ def main():
                 MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, broadcast_compose),
             ],
             BROADCAST_CONFIRM: [CallbackQueryHandler(broadcast_confirm_cb, pattern="^bcast_")],
+            ADMIN_MENU: [CallbackQueryHandler(admin_menu_callback)],
         },
         fallbacks=[CommandHandler("cancel", cancel), CommandHandler("menu", menu_command)],
         allow_reentry=True,

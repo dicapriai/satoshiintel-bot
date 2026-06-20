@@ -4,3 +4,4 @@ python-dotenv==1.0.1
 bip-utils==2.12.1
 qrcode==8.2
 Pillow==11.3.0
+asyncpg==0.31.0

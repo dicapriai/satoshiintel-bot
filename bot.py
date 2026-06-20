@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import io
 import re
+import asyncio
 import logging
 import time
 import random
@@ -10,10 +11,15 @@ import httpx
 import qrcode
 from bip_utils import Bip32Slip10Secp256k1, P2WPKHAddr
 
+try:
+    import asyncpg
+except ImportError:
+    asyncpg = None
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
-    MessageHandler, ConversationHandler, ContextTypes, filters
+    MessageHandler, ConversationHandler, ContextTypes, filters, TypeHandler
 )
 
 import content_edu_a, content_edu_b, content_edu_c, content_edu_d
@@ -41,6 +47,9 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 # Crea tu bot con @BotFather y pon el token en la variable de entorno
 # TELEGRAM_BOT_TOKEN, o pégalo abajo.
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+# Admin(s) para /broadcast y /stats — tu Telegram ID (variable de entorno, NO hardcodeado)
+ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "").split(",") if x.strip()]
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 SATS_PER_BTC = 100_000_000
 # ─── Donaciones (xpub PÚBLICA desde variable de entorno; el repo es público) ────
@@ -75,7 +84,9 @@ _height_cache = {"height": None, "ts": 0.0}
     QUIZ,
     EXPLORER_INPUT,
     ADDRTYPE_INPUT,
-) = range(15)
+    BROADCAST_COMPOSE,
+    BROADCAST_CONFIRM,
+) = range(17)
 
 # ─── Registro de educación (carga dinámica) ────────────────────────────────────
 EDU_CATS = [content_edu_a, content_edu_b, content_edu_c, content_edu_d]
@@ -1528,6 +1539,181 @@ async def send_donation(query, lg):
     return MAIN_MENU
 
 
+# ─── Base de datos (solo guarda QUIÉN usa el bot, nunca QUÉ hace) ───────────────
+async def make_pool(dsn):
+    """Crea el pool de Postgres. Reintenta con SSL relajado para Supabase/Neon."""
+    try:
+        return await asyncpg.create_pool(dsn, min_size=1, max_size=5, command_timeout=10)
+    except Exception as e:
+        logger.warning("pool directo falló (%s); reintento con SSL", e)
+        import ssl as _ssl
+        ctx = _ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = _ssl.CERT_NONE
+        return await asyncpg.create_pool(dsn, ssl=ctx, min_size=1, max_size=5, command_timeout=10)
+
+
+async def init_db(pool):
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                chat_id    BIGINT PRIMARY KEY,
+                username   TEXT,
+                first_name TEXT,
+                language   TEXT,
+                joined_at  TIMESTAMP DEFAULT NOW()
+            )
+        """)
+
+
+async def upsert_user(pool, user, lang_code=None):
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO users (chat_id, username, first_name, language)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (chat_id) DO UPDATE SET
+                username   = EXCLUDED.username,
+                first_name = EXCLUDED.first_name,
+                language   = COALESCE(EXCLUDED.language, users.language)
+        """, user.id, user.username, user.first_name, lang_code)
+
+
+async def get_all_chat_ids(pool):
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT chat_id FROM users")
+        return [r["chat_id"] for r in rows]
+
+
+async def count_users(pool):
+    async with pool.acquire() as conn:
+        return await conn.fetchval("SELECT COUNT(*) FROM users")
+
+
+async def track_user(update, context):
+    """Guarda quién usa el bot (chat_id + username + nombre + idioma). Nada más."""
+    pool = context.application.bot_data.get("db_pool")
+    user = update.effective_user
+    if not (pool and user) or user.is_bot:
+        return
+    try:
+        await upsert_user(pool, user, context.user_data.get("lang"))
+    except Exception as e:
+        logger.warning("track_user: %s", e)
+
+
+# ─── Admin: /broadcast y /stats ─────────────────────────────────────────────────
+def is_admin(update):
+    u = update.effective_user
+    return bool(u and u.id in ADMIN_IDS)
+
+
+async def stats_command(update, context):
+    if not is_admin(update):
+        return ConversationHandler.END
+    pool = context.application.bot_data.get("db_pool")
+    if not pool:
+        await update.message.reply_text("⚠️ Base de datos no configurada (falta DATABASE_URL).")
+        return ConversationHandler.END
+    try:
+        n = await count_users(pool)
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Error consultando la base: {e}")
+        return ConversationHandler.END
+    await update.message.reply_text(f"📊 *Estadísticas*\n\n👥 Usuarios registrados: *{n}*",
+                                    parse_mode="Markdown")
+    return ConversationHandler.END
+
+
+async def broadcast_start(update, context):
+    if not is_admin(update):
+        return ConversationHandler.END
+    await update.message.reply_text(
+        "📢 *Broadcast*\n\nMándame el mensaje que quieres enviar a todos "
+        "(texto, o una foto con texto).\n\nUsa /cancel para abortar.",
+        parse_mode="Markdown")
+    return BROADCAST_COMPOSE
+
+
+def broadcast_confirm_keyboard():
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Enviar a todos", callback_data="bcast_yes"),
+        InlineKeyboardButton("❌ Cancelar", callback_data="bcast_no"),
+    ]])
+
+
+async def broadcast_compose(update, context):
+    if not is_admin(update):
+        return ConversationHandler.END
+    msg = update.message
+    text = (msg.text or msg.caption or "").strip()
+    photo_id = msg.photo[-1].file_id if msg.photo else None
+    if not text and not photo_id:
+        await msg.reply_text("Mándame texto o una foto. /cancel para abortar.")
+        return BROADCAST_COMPOSE
+    context.user_data["pending_broadcast"] = {"text": text, "photo": photo_id}
+    note = "👀 Vista previa (NO enviado aún). ¿Enviar a todos?"
+    if photo_id:
+        await msg.reply_photo(photo_id, caption=(text + f"\n\n———\n{note}") if text else note,
+                              parse_mode="Markdown", reply_markup=broadcast_confirm_keyboard())
+    else:
+        await msg.reply_text(f"{text}\n\n———\n{note}", parse_mode="Markdown",
+                             reply_markup=broadcast_confirm_keyboard())
+    return BROADCAST_CONFIRM
+
+
+async def _send_one(bot, cid, text, photo):
+    for use_md in (True, False):
+        try:
+            kw = {"parse_mode": "Markdown"} if use_md else {}
+            if photo:
+                await bot.send_photo(cid, photo, caption=text or None, **kw)
+            else:
+                await bot.send_message(cid, text, **kw)
+            return True
+        except Exception:
+            continue
+    return False
+
+
+async def broadcast_confirm_cb(update, context):
+    query = update.callback_query
+    await query.answer()
+    if not is_admin(update):
+        return ConversationHandler.END
+    if query.data == "bcast_no":
+        context.user_data.pop("pending_broadcast", None)
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.message.reply_text("❌ Broadcast cancelado.")
+        return ConversationHandler.END
+
+    pending = context.user_data.pop("pending_broadcast", None)
+    pool = context.application.bot_data.get("db_pool")
+    if not pending or not pool:
+        await query.message.reply_text("⚠️ No hay mensaje o base de datos. Cancelado.")
+        return ConversationHandler.END
+
+    await query.edit_message_reply_markup(reply_markup=None)
+    await query.message.reply_text("📤 Enviando...")
+    ids = await get_all_chat_ids(pool)
+    sent = failed = 0
+    for cid in ids:
+        if await _send_one(context.bot, cid, pending["text"], pending["photo"]):
+            sent += 1
+        else:
+            failed += 1
+        await asyncio.sleep(0.05)  # ~20 msg/s, respeta límites de Telegram
+    await query.message.reply_text(
+        f"✅ *Broadcast terminado*\n\nEnviado a *{sent}* usuarios. "
+        f"({failed} fallaron / bloquearon el bot)", parse_mode="Markdown")
+    return ConversationHandler.END
+
+
+async def broadcast_cancel(update, context):
+    context.user_data.pop("pending_broadcast", None)
+    await update.message.reply_text("❌ Broadcast cancelado.")
+    return ConversationHandler.END
+
+
 # ─── Comandos de atajo ──────────────────────────────────────────────────────────
 async def diccionario_command(update, context):
     lg = lang(context)
@@ -1601,6 +1787,19 @@ async def post_init(app):
     except Exception as e:
         logger.warning("No pude fijar el About: %s", e)
     logger.info("✅ Menú de comandos y About configurados en Telegram.")
+    # Base de datos (opcional): si hay DATABASE_URL, conecta y crea la tabla.
+    app.bot_data["db_pool"] = None
+    if DATABASE_URL and asyncpg:
+        try:
+            pool = await make_pool(DATABASE_URL)
+            await init_db(pool)
+            app.bot_data["db_pool"] = pool
+            n = await count_users(pool)
+            logger.info("✅ Base de datos conectada (%s usuarios).", n)
+        except Exception as e:
+            logger.warning("⚠️ No pude conectar a la base de datos: %s", e)
+    else:
+        logger.info("ℹ️ Sin DATABASE_URL — almacenamiento y /broadcast desactivados.")
 
 
 # ─── main ───────────────────────────────────────────────────────────────────────
@@ -1630,6 +1829,8 @@ def main():
             CommandHandler("tools", herramientas_command),
             CommandHandler("educacion", educacion_command),
             CommandHandler("education", educacion_command),
+            CommandHandler("broadcast", broadcast_start),
+            CommandHandler("stats", stats_command),
         ],
         states={
             LANG_SELECT: [CallbackQueryHandler(lang_select, pattern="^lang_")],
@@ -1662,11 +1863,18 @@ def main():
                 CallbackQueryHandler(tools_menu_callback),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, addrtype_input),
             ],
+            BROADCAST_COMPOSE: [
+                CommandHandler("cancel", broadcast_cancel),
+                MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, broadcast_compose),
+            ],
+            BROADCAST_CONFIRM: [CallbackQueryHandler(broadcast_confirm_cb, pattern="^bcast_")],
         },
         fallbacks=[CommandHandler("cancel", cancel), CommandHandler("menu", menu_command)],
         allow_reentry=True,
     )
 
+    # Rastrea QUIÉN usa el bot (para /broadcast). Corre después del manejo normal.
+    app.add_handler(TypeHandler(Update, track_user), group=1)
     app.add_handler(conv)
     logger.info("🚀 Bitcoin Bot iniciado. Esperando mensajes...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)

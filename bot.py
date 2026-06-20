@@ -1656,21 +1656,51 @@ async def users_command(update, context):
     return ConversationHandler.END
 
 
+def broadcast_confirm_keyboard(n=None):
+    label = f"✅ Enviar a todos ({n})" if n is not None else "✅ Enviar a todos"
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton(label, callback_data="bcast_yes"),
+        InlineKeyboardButton("❌ Cancelar", callback_data="bcast_no"),
+    ]])
+
+
+async def _broadcast_preview(update, context, text, photo_id):
+    context.user_data["pending_broadcast"] = {"text": text, "photo": photo_id}
+    pool = context.application.bot_data.get("db_pool")
+    n = 0
+    if pool:
+        try:
+            n = await count_users(pool)
+        except Exception:
+            pass
+    note = (f"📢 *VISTA PREVIA* (no enviado aún)\nSe enviará a *{n}* usuarios.\n\n"
+            "¿Confirmar envío? 👇")
+    msg = update.message
+    if photo_id:
+        cap = (text + f"\n\n———\n{note}") if text else note
+        await msg.reply_photo(photo_id, caption=cap, parse_mode="Markdown",
+                              reply_markup=broadcast_confirm_keyboard(n))
+    else:
+        await msg.reply_text(f"{text}\n\n———\n{note}", parse_mode="Markdown",
+                             reply_markup=broadcast_confirm_keyboard(n))
+    return BROADCAST_CONFIRM
+
+
 async def broadcast_start(update, context):
     if not is_admin(update):
         return ConversationHandler.END
-    await update.message.reply_text(
-        "📢 *Broadcast*\n\nMándame el mensaje que quieres enviar a todos "
-        "(texto, o una foto con texto).\n\nUsa /cancel para abortar.",
-        parse_mode="Markdown")
-    return BROADCAST_COMPOSE
-
-
-def broadcast_confirm_keyboard():
-    return InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ Enviar a todos", callback_data="bcast_yes"),
-        InlineKeyboardButton("❌ Cancelar", callback_data="bcast_no"),
-    ]])
+    msg = update.message
+    text = " ".join(context.args).strip() if context.args else ""
+    photo_id = msg.photo[-1].file_id if (msg and msg.photo) else None
+    if not text and not photo_id:
+        await msg.reply_text(
+            "📢 *Cómo enviar un broadcast*\n\n"
+            "• *Solo texto:*\n`/broadcast tu mensaje aquí`\n\n"
+            "• *Con foto:*\nMándame ahora una foto (con o sin texto).\n\n"
+            "Te mostraré una vista previa antes de enviar.",
+            parse_mode="Markdown")
+        return BROADCAST_COMPOSE
+    return await _broadcast_preview(update, context, text, photo_id)
 
 
 async def broadcast_compose(update, context):
@@ -1682,15 +1712,7 @@ async def broadcast_compose(update, context):
     if not text and not photo_id:
         await msg.reply_text("Mándame texto o una foto. /cancel para abortar.")
         return BROADCAST_COMPOSE
-    context.user_data["pending_broadcast"] = {"text": text, "photo": photo_id}
-    note = "👀 Vista previa (NO enviado aún). ¿Enviar a todos?"
-    if photo_id:
-        await msg.reply_photo(photo_id, caption=(text + f"\n\n———\n{note}") if text else note,
-                              parse_mode="Markdown", reply_markup=broadcast_confirm_keyboard())
-    else:
-        await msg.reply_text(f"{text}\n\n———\n{note}", parse_mode="Markdown",
-                             reply_markup=broadcast_confirm_keyboard())
-    return BROADCAST_CONFIRM
+    return await _broadcast_preview(update, context, text, photo_id)
 
 
 async def _send_one(bot, cid, text, photo):

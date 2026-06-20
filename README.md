@@ -1,39 +1,47 @@
-# ₿ SatoshiIntel — Bot de Bitcoin para Telegram
+# ₿ SatoshiIntel
 
-Academia Bitcoin + Centro de Herramientas en Telegram. Bilingüe (Español / English).
+Tu guía Bitcoin de bolsillo, en Telegram. Aprende, calcula y vuélvete soberano.
+Bilingüe (Español / English).
 
-## Funciones
-- 🧮 **Herramientas**: precio en vivo, conversor SAT/USD/BTC, Apila Sats (DCA), Profit, Retiro, Cuenta regresiva al halving, Mempool en vivo, detector de estafas.
-- 📚 **Educación**: 22 módulos en 4 categorías (fundamentos del dinero, cómo funciona, historia y cultura, práctica y mentalidad).
-- 📖 **Diccionario Bitcoin**: 90 términos en 12 categorías, con buscador.
-- 🔤 **Lista BIP39**: explorador de las 2048 palabras (buscar por palabra/número, ver por páginas).
-- 🧠 **Quiz**: preguntas bilingües para aprender jugando.
-- 💬 **Cita del día**.
+🔐 *No confíes, verifica.*
 
-Datos en vivo gratis (sin API key): precio de **CoinGecko**, red/halving de **mempool.space**.
+🤖 Bot: **@SatoshiIntelbot** · 📢 Canal: **@SatoshiIntel**
 
-## Variables de entorno
-| Variable | Descripción |
-|---|---|
-| `TELEGRAM_BOT_TOKEN` | Token del bot (de @BotFather). **Obligatoria.** |
-| `ADMIN_IDS` | (Opcional) IDs de admin separados por coma. |
+---
 
-## Correr en local
-```bash
-pip install -r requirements.txt
-# crea un archivo .env con: TELEGRAM_BOT_TOKEN=tu_token
-python bot.py
-```
+## ¿Qué hace?
 
-## Desplegar en Railway
-1. Conecta este repo de GitHub a un nuevo proyecto en Railway.
-2. En **Variables**, agrega `TELEGRAM_BOT_TOKEN`.
-3. Railway usa el `Procfile` (`worker: python bot.py`) para arrancarlo.
+SatoshiIntel es un bot educativo de Bitcoin con herramientas en vivo, pensado para principiantes.
 
-## Estructura
-- `bot.py` — lógica, menús, herramientas
-- `content_edu_*.py` — módulos de educación
-- `content_dict_*.py` — términos del diccionario
-- `content_quiz.py` — banco de preguntas del quiz
-- `content_quotes.py` — citas
-- `bip39_english.txt` — lista oficial BIP39 (2048 palabras)
+### 🧮 Herramientas
+- 💰 Precio de Bitcoin en vivo + conversor USD / SAT / BTC
+- 🟧 Apila Sats (DCA), 📈 Ganancia, 🏖️ Retiro
+- ⏳ Cuenta regresiva al halving
+- 🌐 Mempool en vivo (comisiones y estado de la red)
+- 🔎 Explorador de transacciones y direcciones
+- 🏷️ Identificador de tipo de dirección
+- 🧮 ¿UTXO gastable o polvo?
+
+### 📚 Aprende
+- 🎓 22 lecciones (fundamentos del dinero, cómo funciona, historia, práctica)
+- 📖 Diccionario Bitcoin con más de 90 términos
+- 🔤 Lista BIP39 (las 2048 palabras oficiales)
+- 🧠 Quiz para aprender jugando
+- 💬 Cita del día
+
+### 🧡 Apoya el proyecto
+Donaciones en Bitcoin (on-chain), con dirección nueva y código QR para tu privacidad.
+
+---
+
+## 🔒 Privacidad primero
+
+SatoshiIntel respeta tu privacidad, como buen bitcoiner:
+
+- ❌ **No** guardamos qué direcciones buscas, qué herramientas usas, ni tus mensajes.
+- ❌ Las búsquedas de direcciones y TXID **no** se registran en ningún log.
+- ✅ Lo único que se guarda es *quién* usa el bot (para avisos), **nunca** *qué hace*.
+
+Tu actividad es tuya. 🟠
+
+*No confíes, verifica.*

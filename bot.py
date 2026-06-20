@@ -1589,6 +1589,13 @@ async def count_users(pool):
         return await conn.fetchval("SELECT COUNT(*) FROM users")
 
 
+async def get_recent_users(pool, limit=20):
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            "SELECT username, first_name, joined_at FROM users "
+            "ORDER BY joined_at DESC NULLS LAST LIMIT $1", limit)
+
+
 async def track_user(update, context):
     """Guarda quién usa el bot (chat_id + username + nombre + idioma). Nada más."""
     pool = context.application.bot_data.get("db_pool")
@@ -1621,6 +1628,31 @@ async def stats_command(update, context):
         return ConversationHandler.END
     await update.message.reply_text(f"📊 *Estadísticas*\n\n👥 Usuarios registrados: *{n}*",
                                     parse_mode="Markdown")
+    return ConversationHandler.END
+
+
+async def users_command(update, context):
+    if not is_admin(update):
+        return ConversationHandler.END
+    pool = context.application.bot_data.get("db_pool")
+    if not pool:
+        await update.message.reply_text("⚠️ Base de datos no configurada (falta DATABASE_URL).")
+        return ConversationHandler.END
+    try:
+        total = await count_users(pool)
+        rows = await get_recent_users(pool, 20)
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Error: {e}")
+        return ConversationHandler.END
+    lines = []
+    for i, r in enumerate(rows, 1):
+        who = ("@" + r["username"]) if r["username"] else (r["first_name"] or "—")
+        d = r["joined_at"].strftime("%d/%m/%y") if r["joined_at"] else "?"
+        lines.append(f"{i}. {who} — {d}")
+    body = "\n".join(lines) if lines else "(sin usuarios todavía)"
+    # Texto plano: los @username pueden tener guiones bajos y romperían Markdown.
+    await update.message.reply_text(
+        f"👥 Usuarios (últimos {len(rows)})\n\n{body}\n\nTotal: {total}")
     return ConversationHandler.END
 
 
@@ -1831,6 +1863,7 @@ def main():
             CommandHandler("education", educacion_command),
             CommandHandler("broadcast", broadcast_start),
             CommandHandler("stats", stats_command),
+            CommandHandler("users", users_command),
         ],
         states={
             LANG_SELECT: [CallbackQueryHandler(lang_select, pattern="^lang_")],

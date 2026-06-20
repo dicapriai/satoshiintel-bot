@@ -33,6 +33,9 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+# 🔒 Privacidad: que httpx NO registre las URLs (contienen direcciones/TXID del usuario).
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 # ─── Config ─────────────────────────────────────────────────────────────────────
 # Crea tu bot con @BotFather y pon el token en la variable de entorno

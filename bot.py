@@ -305,10 +305,10 @@ def tools_keyboard(lg):
     if lg == "es":
         rows = [
             [InlineKeyboardButton("💰 Precio de Bitcoin ahora", callback_data="price_now")],
+            [InlineKeyboardButton("🔔 Alertas de precio", callback_data="alerts")],
             [InlineKeyboardButton("💵 USD → BTC / SAT", callback_data="conv_usd")],
             [InlineKeyboardButton("⚡ SATS → USD / BTC", callback_data="conv_sat")],
             [InlineKeyboardButton("₿ BTC → USD / SAT", callback_data="conv_btc")],
-            [InlineKeyboardButton("🔔 Alertas de precio", callback_data="alerts")],
             [InlineKeyboardButton("🟧 Apila Sats (DCA)", callback_data="dca")],
             [InlineKeyboardButton("📈 Ganancia / Profit", callback_data="profit")],
             [InlineKeyboardButton("🏖️ Retiro (ahorro futuro)", callback_data="retirement")],
@@ -322,10 +322,10 @@ def tools_keyboard(lg):
     else:
         rows = [
             [InlineKeyboardButton("💰 Bitcoin Price Now", callback_data="price_now")],
+            [InlineKeyboardButton("🔔 Price alerts", callback_data="alerts")],
             [InlineKeyboardButton("💵 USD → BTC / SAT", callback_data="conv_usd")],
             [InlineKeyboardButton("⚡ SATS → USD / BTC", callback_data="conv_sat")],
             [InlineKeyboardButton("₿ BTC → USD / SAT", callback_data="conv_btc")],
-            [InlineKeyboardButton("🔔 Price alerts", callback_data="alerts")],
             [InlineKeyboardButton("🟧 Stack Sats (DCA)", callback_data="dca")],
             [InlineKeyboardButton("📈 Profit calculator", callback_data="profit")],
             [InlineKeyboardButton("🏖️ Retirement (future savings)", callback_data="retirement")],

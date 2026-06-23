@@ -309,7 +309,7 @@ def tools_keyboard(lg):
             [InlineKeyboardButton("🟧 Apila Sats (DCA)", callback_data="dca")],
             [InlineKeyboardButton("📈 Ganancia / Profit", callback_data="profit")],
             [InlineKeyboardButton("🏖️ Retiro (ahorro futuro)", callback_data="retirement")],
-            [InlineKeyboardButton("⏳ Cuenta regresiva al halving", callback_data="halving")],
+            [InlineKeyboardButton("₿ Suministro y Halving", callback_data="halving")],
             [InlineKeyboardButton("🌐 Mempool en vivo", callback_data="mempool")],
             [InlineKeyboardButton("🔎 Explorador de TX / dirección", callback_data="explorer")],
             [InlineKeyboardButton("🏷️ ¿Qué tipo de dirección es?", callback_data="addrtype")],
@@ -325,7 +325,7 @@ def tools_keyboard(lg):
             [InlineKeyboardButton("🟧 Stack Sats (DCA)", callback_data="dca")],
             [InlineKeyboardButton("📈 Profit calculator", callback_data="profit")],
             [InlineKeyboardButton("🏖️ Retirement (future savings)", callback_data="retirement")],
-            [InlineKeyboardButton("⏳ Halving countdown", callback_data="halving")],
+            [InlineKeyboardButton("₿ Supply & Halving", callback_data="halving")],
             [InlineKeyboardButton("🌐 Live Mempool", callback_data="mempool")],
             [InlineKeyboardButton("🔎 TX / address explorer", callback_data="explorer")],
             [InlineKeyboardButton("🏷️ What address type is it?", callback_data="addrtype")],
@@ -806,6 +806,19 @@ async def compute_tool(tool, d, lg):
 
 
 # ─── Herramienta: halving / % minado ────────────────────────────────────────────
+def _supply_bar(pct, n=10):
+    filled = max(0, min(n, int(pct / 100 * n)))  # piso: no se ve lleno hasta ~100%
+    return "▰" * filled + "▱" * (n - filled)
+
+
+def _fmt_mcap(v):
+    if v >= 1e12:
+        return f"${v / 1e12:.2f} T"
+    if v >= 1e9:
+        return f"${v / 1e9:.2f} B"
+    return f"${v:,.0f}"
+
+
 async def halving_text(lg):
     h = await get_block_height()
     if not h:
@@ -813,35 +826,35 @@ async def halving_text(lg):
     epoch = h // HALVING_INTERVAL
     reward = 50 / (2 ** epoch)
     next_h = (epoch + 1) * HALVING_INTERVAL
-    blocks_left = next_h - h
-    minutes_left = blocks_left * BLOCK_MINUTES
-    days_left = minutes_left / 1440
-    next_reward = reward / 2
-    # suministro minado
-    mined = 0.0
-    for e in range(epoch):
-        mined += HALVING_INTERVAL * (50 / (2 ** e))
-    mined += (h - epoch * HALVING_INTERVAL) * reward
+    days_left = (next_h - h) * BLOCK_MINUTES / 1440
+    mined = sum(HALVING_INTERVAL * (50 / (2 ** e)) for e in range(epoch)) + (h - epoch * HALVING_INTERVAL) * reward
+    remaining = 21_000_000 - mined
     pct = mined / 21_000_000 * 100
+    infl = reward * 52_560 / mined * 100  # emisión anual (52,560 bloques/año) / suministro
+    price = await get_btc_price()
     if lg == "es":
-        return ("⏳ *Cuenta regresiva al halving*\n\n"
-                f"Bloque actual: *{h:,}*\n"
-                f"Recompensa hoy: *{reward:g} BTC* por bloque\n"
-                f"Próximo halving en el bloque: *{next_h:,}*\n"
-                f"Faltan: *{blocks_left:,} bloques* (≈ *{days_left:.0f} días*)\n"
-                f"Nueva recompensa: *{next_reward:g} BTC*\n\n"
-                f"Ya se minó el *{pct:.2f}%* de los 21,000,000 ₿\n"
-                f"(*{fmt_sats(mined)} BTC* en circulación)\n\n"
-                "_Cada 210,000 bloques (~4 años) la emisión se reduce a la mitad._")
-    return ("⏳ *Halving countdown*\n\n"
-            f"Current block: *{h:,}*\n"
-            f"Reward today: *{reward:g} BTC* per block\n"
-            f"Next halving at block: *{next_h:,}*\n"
-            f"Remaining: *{blocks_left:,} blocks* (≈ *{days_left:.0f} days*)\n"
-            f"New reward: *{next_reward:g} BTC*\n\n"
-            f"Already mined: *{pct:.2f}%* of 21,000,000 ₿\n"
-            f"(*{fmt_sats(mined)} BTC* in circulation)\n\n"
-            "_Every 210,000 blocks (~4 years) issuance halves._")
+        t = ("₿ *Suministro y Halving*\n\n"
+             f"Suministro actual: *{fmt_sats(mined)} BTC*\n"
+             f"Máximo: *21,000,000 BTC*\n"
+             f"Faltan por minar: *{fmt_sats(remaining)} BTC*\n"
+             f"Minado: *{pct:.2f}%*\n{_supply_bar(pct)}\n"
+             f"📉 Inflación: *~{infl:.1f}%/año* (menos que el oro ~1.7%)\n\n")
+        if price:
+            t += f"💰 Precio: *{fmt_usd(price)}*\n🏦 Market cap: *{_fmt_mcap(mined * price)}*\n\n"
+        t += (f"⏳ Próximo halving: ~*{days_left:.0f} días* (bloque {next_h:,})\n\n"
+              "_Cada 210,000 bloques (~4 años) la emisión se reduce a la mitad._")
+        return t
+    t = ("₿ *Supply & Halving*\n\n"
+         f"Current supply: *{fmt_sats(mined)} BTC*\n"
+         f"Max: *21,000,000 BTC*\n"
+         f"Left to mine: *{fmt_sats(remaining)} BTC*\n"
+         f"Mined: *{pct:.2f}%*\n{_supply_bar(pct)}\n"
+         f"📉 Inflation: *~{infl:.1f}%/yr* (less than gold ~1.7%)\n\n")
+    if price:
+        t += f"💰 Price: *{fmt_usd(price)}*\n🏦 Market cap: *{_fmt_mcap(mined * price)}*\n\n"
+    t += (f"⏳ Next halving: ~*{days_left:.0f} days* (block {next_h:,})\n\n"
+          "_Every 210,000 blocks (~4 years) issuance halves._")
+    return t
 
 
 # ─── Herramienta: detector de estafas ──────────────────────────────────────────

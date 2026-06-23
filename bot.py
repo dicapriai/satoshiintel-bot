@@ -87,7 +87,9 @@ _height_cache = {"height": None, "ts": 0.0}
     BROADCAST_COMPOSE,
     BROADCAST_CONFIRM,
     ADMIN_MENU,
-) = range(18)
+    ALERTS_MENU,
+    ALERT_PRICE,
+) = range(20)
 
 # ─── Registro de educación (carga dinámica) ────────────────────────────────────
 EDU_CATS = [content_edu_a, content_edu_b, content_edu_c, content_edu_d]
@@ -306,6 +308,7 @@ def tools_keyboard(lg):
             [InlineKeyboardButton("💵 USD → BTC / SAT", callback_data="conv_usd")],
             [InlineKeyboardButton("⚡ SATS → USD / BTC", callback_data="conv_sat")],
             [InlineKeyboardButton("₿ BTC → USD / SAT", callback_data="conv_btc")],
+            [InlineKeyboardButton("🔔 Alertas de precio", callback_data="alerts")],
             [InlineKeyboardButton("🟧 Apila Sats (DCA)", callback_data="dca")],
             [InlineKeyboardButton("📈 Ganancia / Profit", callback_data="profit")],
             [InlineKeyboardButton("🏖️ Retiro (ahorro futuro)", callback_data="retirement")],
@@ -322,6 +325,7 @@ def tools_keyboard(lg):
             [InlineKeyboardButton("💵 USD → BTC / SAT", callback_data="conv_usd")],
             [InlineKeyboardButton("⚡ SATS → USD / BTC", callback_data="conv_sat")],
             [InlineKeyboardButton("₿ BTC → USD / SAT", callback_data="conv_btc")],
+            [InlineKeyboardButton("🔔 Price alerts", callback_data="alerts")],
             [InlineKeyboardButton("🟧 Stack Sats (DCA)", callback_data="dca")],
             [InlineKeyboardButton("📈 Profit calculator", callback_data="profit")],
             [InlineKeyboardButton("🏖️ Retirement (future savings)", callback_data="retirement")],
@@ -962,6 +966,8 @@ async def tools_menu_callback(update, context):
     if data == "mempool":
         await edit_md(query, await mempool_text(lg), tools_keyboard(lg))
         return TOOLS_MENU
+    if data == "alerts":
+        return await show_alerts_menu(query, lg)
     if data == "explorer":
         msg = ("🔎 *Explorador*\n\nPega un *TXID* (64 caracteres) o una *dirección* "
                "Bitcoin (bc1.../1.../3...) y te muestro su info:"
@@ -1391,6 +1397,120 @@ async def quiz_callback(update, context):
     return QUIZ
 
 
+# ─── Alertas de precio (UI) ─────────────────────────────────────────────────────
+def alerts_menu_keyboard(lg):
+    if lg == "es":
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("📈 Avísame si SUBE de $X", callback_data="alert_above")],
+            [InlineKeyboardButton("📉 Avísame si BAJA de $X", callback_data="alert_below")],
+            [InlineKeyboardButton("📋 Mis alertas", callback_data="alert_list")],
+            [InlineKeyboardButton("🔙 Herramientas", callback_data="tools")],
+        ])
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📈 Alert me if it goes ABOVE $X", callback_data="alert_above")],
+        [InlineKeyboardButton("📉 Alert me if it drops BELOW $X", callback_data="alert_below")],
+        [InlineKeyboardButton("📋 My alerts", callback_data="alert_list")],
+        [InlineKeyboardButton("🔙 Tools", callback_data="tools")],
+    ])
+
+
+def alerts_back_keyboard(lg):
+    label = "🔙 Alertas" if lg == "es" else "🔙 Alerts"
+    return InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data="alerts")]])
+
+
+def alerts_title(lg):
+    return (f"🔔 *Alertas de precio*\n\nTe aviso cuando Bitcoin llegue al precio que elijas. (máx {MAX_ALERTS})"
+            if lg == "es" else
+            f"🔔 *Price alerts*\n\nI'll ping you when Bitcoin hits your target. (max {MAX_ALERTS})")
+
+
+async def show_alerts_menu(query, lg):
+    await edit_md(query, alerts_title(lg), alerts_menu_keyboard(lg))
+    return ALERTS_MENU
+
+
+async def show_alert_list(query, context, lg):
+    pool = context.application.bot_data.get("db_pool")
+    rows = await get_alerts(pool, query.from_user.id) if pool else []
+    if not rows:
+        await edit_md(query, "No tienes alertas todavía." if lg == "es" else "No alerts yet.",
+                      alerts_menu_keyboard(lg))
+        return ALERTS_MENU
+    kb = []
+    for r in rows:
+        arrow = "📈" if r["direction"] == "above" else "📉"
+        kb.append([InlineKeyboardButton(f"🗑 {arrow} {fmt_usd(r['target'])}", callback_data=f"aldel_{r['id']}")])
+    kb.append([InlineKeyboardButton("🔙 Alertas" if lg == "es" else "🔙 Alerts", callback_data="alerts")])
+    head = "📋 Toca una alerta para borrarla:" if lg == "es" else "📋 Tap an alert to delete it:"
+    await edit_md(query, head, InlineKeyboardMarkup(kb))
+    return ALERTS_MENU
+
+
+async def alerts_menu_callback(update, context):
+    query = update.callback_query
+    await query.answer()
+    lg = lang(context)
+    data = query.data
+    pool = context.application.bot_data.get("db_pool")
+
+    if data == "tools":
+        title = "🧮 *Herramientas* — elige una:" if lg == "es" else "🧮 *Tools* — choose one:"
+        await edit_md(query, title, tools_keyboard(lg))
+        return TOOLS_MENU
+    if data == "alerts":
+        return await show_alerts_menu(query, lg)
+    if not pool:
+        await edit_md(query, "⚠️ Las alertas no están disponibles ahora." if lg == "es"
+                      else "⚠️ Alerts aren't available right now.", tools_back_keyboard(lg))
+        return TOOLS_MENU
+    if data in ("alert_above", "alert_below"):
+        if await count_alerts(pool, query.from_user.id) >= MAX_ALERTS:
+            msg = (f"⚠️ Llegaste al máximo de {MAX_ALERTS} alertas. Borra una en 📋 Mis alertas."
+                   if lg == "es" else f"⚠️ You reached the max of {MAX_ALERTS} alerts. Delete one in 📋 My alerts.")
+            await edit_md(query, msg, alerts_menu_keyboard(lg))
+            return ALERTS_MENU
+        context.user_data["alert_dir"] = "above" if data == "alert_above" else "below"
+        verb = (("suba de" if data == "alert_above" else "baje de") if lg == "es"
+                else ("goes above" if data == "alert_above" else "drops below"))
+        msg = (f"💲 Escribe el precio en USD para avisarte si Bitcoin {verb} (ej. 70000):" if lg == "es"
+               else f"💲 Type the USD price to alert when Bitcoin {verb} (e.g. 70000):")
+        await edit_md(query, msg, alerts_back_keyboard(lg))
+        return ALERT_PRICE
+    if data == "alert_list":
+        return await show_alert_list(query, context, lg)
+    if data.startswith("aldel_"):
+        try:
+            aid = int(data.split("_")[1])
+        except (ValueError, IndexError):
+            aid = 0
+        await delete_alert(pool, aid, query.from_user.id)
+        return await show_alert_list(query, context, lg)
+    return ALERTS_MENU
+
+
+async def alert_price_input(update, context):
+    lg = lang(context)
+    val = parse_number(update.message.text)
+    if val is None or val <= 0:
+        await reply_md(update, "❌ Escribe un precio válido (ej. 70000)." if lg == "es"
+                       else "❌ Type a valid price (e.g. 70000).", alerts_back_keyboard(lg))
+        return ALERT_PRICE
+    pool = context.application.bot_data.get("db_pool")
+    direction = context.user_data.get("alert_dir", "above")
+    if pool:
+        if await count_alerts(pool, update.effective_user.id) >= MAX_ALERTS:
+            await reply_md(update, f"⚠️ Máximo {MAX_ALERTS} alertas.", alerts_menu_keyboard(lg))
+            return ALERTS_MENU
+        await add_alert(pool, update.effective_user.id, direction, val, lg)
+    verb = (("suba de" if direction == "above" else "baje de") if lg == "es"
+            else ("goes above" if direction == "above" else "drops below"))
+    msg = (f"✅ Alerta creada. Te aviso si Bitcoin {verb} *{fmt_usd(val)}*." if lg == "es"
+           else f"✅ Alert created. I'll ping you when Bitcoin {verb} *{fmt_usd(val)}*.")
+    await reply_md(update, msg, alerts_menu_keyboard(lg))
+    return ALERTS_MENU
+
+
 # ─── Explorador de transacciones / direcciones ──────────────────────────────────
 async def explorer_input(update, context):
     lg = lang(context)
@@ -1575,6 +1695,9 @@ async def make_pool(dsn):
         return await asyncpg.create_pool(dsn, ssl=ctx, min_size=1, max_size=5, command_timeout=10)
 
 
+MAX_ALERTS = 5  # por usuario (gratis). Premium luego sube esto.
+
+
 async def init_db(pool):
     async with pool.acquire() as conn:
         await conn.execute("""
@@ -1584,6 +1707,16 @@ async def init_db(pool):
                 first_name TEXT,
                 language   TEXT,
                 joined_at  TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS alerts (
+                id         SERIAL PRIMARY KEY,
+                chat_id    BIGINT,
+                direction  TEXT,
+                target     DOUBLE PRECISION,
+                lang       TEXT,
+                created_at TIMESTAMP DEFAULT NOW()
             )
         """)
 
@@ -1616,6 +1749,65 @@ async def get_recent_users(pool, limit=20):
         return await conn.fetch(
             "SELECT username, first_name, joined_at FROM users "
             "ORDER BY joined_at DESC NULLS LAST LIMIT $1", limit)
+
+
+# ─── Alertas de precio (DB) ─────────────────────────────────────────────────────
+async def count_alerts(pool, chat_id):
+    async with pool.acquire() as conn:
+        return await conn.fetchval("SELECT COUNT(*) FROM alerts WHERE chat_id=$1", chat_id)
+
+
+async def add_alert(pool, chat_id, direction, target, lang_code):
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO alerts (chat_id, direction, target, lang) VALUES ($1,$2,$3,$4)",
+            chat_id, direction, target, lang_code)
+
+
+async def get_alerts(pool, chat_id):
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            "SELECT id, direction, target FROM alerts WHERE chat_id=$1 ORDER BY id", chat_id)
+
+
+async def delete_alert(pool, alert_id, chat_id):
+    async with pool.acquire() as conn:
+        await conn.execute("DELETE FROM alerts WHERE id=$1 AND chat_id=$2", alert_id, chat_id)
+
+
+async def pop_triggered_alerts(pool, price):
+    # Devuelve las alertas disparadas y las borra (un solo uso). El filtro lo hace SQL.
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            "DELETE FROM alerts WHERE (direction='above' AND target<=$1) "
+            "OR (direction='below' AND target>=$1) RETURNING chat_id, direction, target, lang", price)
+
+
+async def alert_loop(app):
+    while True:
+        await asyncio.sleep(60)
+        pool = app.bot_data.get("db_pool")
+        if not pool:
+            continue
+        try:
+            price = await get_btc_price()
+            if not price:
+                continue
+            for a in await pop_triggered_alerts(pool, price):
+                lg = a["lang"] or "es"
+                if lg == "es":
+                    arrow = "subió 📈 por encima de" if a["direction"] == "above" else "bajó 📉 por debajo de"
+                    msg = f"🔔 *¡Bitcoin {arrow} {fmt_usd(a['target'])}!*\nPrecio actual: *{fmt_usd(price)}*"
+                else:
+                    arrow = "rose 📈 above" if a["direction"] == "above" else "dropped 📉 below"
+                    msg = f"🔔 *Bitcoin {arrow} {fmt_usd(a['target'])}!*\nCurrent price: *{fmt_usd(price)}*"
+                try:
+                    await app.bot.send_message(a["chat_id"], msg, parse_mode="Markdown")
+                except Exception:
+                    pass
+                await asyncio.sleep(0.05)
+        except Exception as e:
+            logger.warning("alert_loop: %s", e)
 
 
 async def track_user(update, context):
@@ -1957,6 +2149,8 @@ async def post_init(app):
             app.bot_data["db_pool"] = pool
             n = await count_users(pool)
             logger.info("✅ Base de datos conectada (%s usuarios).", n)
+            asyncio.create_task(alert_loop(app))  # loop de alertas de precio
+            logger.info("🔔 Loop de alertas iniciado.")
         except Exception as e:
             logger.warning("⚠️ No pude conectar a la base de datos: %s", e)
     else:
@@ -2031,6 +2225,11 @@ def main():
             ],
             BROADCAST_CONFIRM: [CallbackQueryHandler(broadcast_confirm_cb, pattern="^bcast_")],
             ADMIN_MENU: [CallbackQueryHandler(admin_menu_callback)],
+            ALERTS_MENU: [CallbackQueryHandler(alerts_menu_callback)],
+            ALERT_PRICE: [
+                CallbackQueryHandler(alerts_menu_callback),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, alert_price_input),
+            ],
         },
         fallbacks=[CommandHandler("cancel", cancel), CommandHandler("menu", menu_command)],
         allow_reentry=True,

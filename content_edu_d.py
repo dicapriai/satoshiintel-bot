@@ -4,7 +4,7 @@ CATEGORY = {
     "btn_en": "🛠️ Practice & mindset",
 }
 
-ORDER = ["edu_d1", "edu_d2", "edu_d3", "edu_d4", "edu_d5"]
+ORDER = ["edu_d1", "edu_d2", "edu_d3", "edu_d4", "edu_d5", "edu_d6"]
 
 MODULES = {
     "edu_d1": {
@@ -162,5 +162,41 @@ We're like the Internet in the 1990s: slow, strange, full of skeptics. Back then
 • You aren't late: this is just beginning.
 
 You're already here, learning the basics. That puts you years ahead of most people. Bitcoin is a tool for inclusion, and understanding it is the first step to using it with freedom.""",
+    },
+    "edu_d6": {
+        "btn_es": "🎲 Entropía y dados",
+        "btn_en": "🎲 Entropy & dice",
+        "es": """*Entropía: el azar que protege tus bitcoin*
+
+Tu frase semilla nace de un número aleatorio. A ese azar se le llama _entropía_, y se mide en bits. Con 128 bits hay tantas combinaciones posibles que adivinarla es imposible. Con 40 bits, una computadora la revienta en minutos.
+
+En 2026 pasó justo eso: un fallo en las Coldcard hacía que las semillas salieran con ~40-72 bits en vez de 128. Cuando se hizo público, se robaron unos *594 BTC (38 millones de dólares)* de ~500 billeteras en minutos.
+
+¿Quiénes se salvaron? Los que habían creado su semilla con *sus propios dados*.
+
+*Cómo generar tu propia entropía:*
+• Un dado normal aporta 2.58 bits. *50 tiradas = 129 bits*, más que suficiente.
+• Con la lista EFF, cada 5 dados te dan una palabra (7,776 = 6 elevado a 5). Seis palabras ya son 77 bits.
+• Anota todo en papel, sin conexión. Nunca en fotos, nube ni chats.
+
+*La regla de oro:* nunca dejes que un tercero genere tu azar. Ni una web, ni un bot, ni una IA. El único azar en el que puedes confiar es el que tiras tú con tus manos.
+
+_No confíes, verifica._""",
+        "en": """*Entropy: the randomness that protects your bitcoin*
+
+Your seed phrase is born from a random number. That randomness is called _entropy_, and it's measured in bits. With 128 bits there are so many combinations that guessing is impossible. With 40 bits, a computer cracks it in minutes.
+
+In 2026 exactly that happened: a Coldcard flaw generated seeds with ~40-72 bits instead of 128. When it went public, about *594 BTC (38 million dollars)* were swept from ~500 wallets in minutes.
+
+Who was safe? The people who created their seed with *their own dice*.
+
+*How to generate your own entropy:*
+• One regular die gives 2.58 bits. *50 rolls = 129 bits*, more than enough.
+• With the EFF list, every 5 dice give you one word (7,776 = 6 to the 5th). Six words is already 77 bits.
+• Write everything on paper, offline. Never in photos, cloud or chats.
+
+*The golden rule:* never let a third party generate your randomness. Not a website, not a bot, not an AI. The only randomness you can trust is the one you roll yourself.
+
+_Don't trust, verify._""",
     },
 }

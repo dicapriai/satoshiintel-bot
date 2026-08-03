@@ -89,7 +89,9 @@ _height_cache = {"height": None, "ts": 0.0}
     ADMIN_MENU,
     ALERTS_MENU,
     ALERT_PRICE,
-) = range(20)
+    METER_MENU,
+    METER_INPUT,
+) = range(22)
 
 # ─── Registro de educación (carga dinámica) ────────────────────────────────────
 EDU_CATS = [content_edu_a, content_edu_b, content_edu_c, content_edu_d]
@@ -349,6 +351,8 @@ def education_keyboard(lg):
     for m in EDU_CATS:
         label = m.CATEGORY["btn_es"] if lg == "es" else m.CATEGORY["btn_en"]
         rows.append([InlineKeyboardButton(label, callback_data=m.CATEGORY["key"])])
+    rows.append([InlineKeyboardButton("🔐 Medidor de fuerza" if lg == "es" else "🔐 Strength meter",
+                                      callback_data="meter")])
     rows.append([InlineKeyboardButton("🔙 Menú Principal" if lg == "es" else "🔙 Main Menu",
                                       callback_data="back_main")])
     return InlineKeyboardMarkup(rows)
@@ -521,6 +525,9 @@ async def education_menu_callback(update, context):
         title = "📚 *Educación* — elige una categoría:" if lg == "es" else "📚 *Education* — choose a category:"
         await edit_md(query, title, education_keyboard(lg))
         return EDU_MENU
+    if data == "meter":
+        await edit_md(query, meter_title(lg), meter_keyboard(lg))
+        return METER_MENU
     if data in CAT_BY_KEY:
         cat = CAT_BY_KEY[data]
         label = cat.CATEGORY["btn_es"] if lg == "es" else cat.CATEGORY["btn_en"]
@@ -1397,6 +1404,127 @@ async def quiz_callback(update, context):
     return QUIZ
 
 
+# ─── Medidor de fuerza (solo formato, NUNCA la passphrase real) ────────────────
+# bits por unidad: lista EFF (7776 palabras), dado de 6 caras, carácter alfanumérico
+METER_FORMATS = {
+    "meter_eff": (12.925, "palabras de la lista EFF", "EFF wordlist words"),
+    "meter_dice": (2.585, "tiradas de dados", "dice rolls"),
+    "meter_chars": (5.954, "caracteres (letras y números)", "characters (letters+digits)"),
+}
+
+
+def meter_keyboard(lg):
+    if lg == "es":
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("🎲 Palabras de lista EFF", callback_data="meter_eff")],
+            [InlineKeyboardButton("🎯 Tiradas de dados", callback_data="meter_dice")],
+            [InlineKeyboardButton("🔤 Caracteres al azar", callback_data="meter_chars")],
+            [InlineKeyboardButton("🔙 Educación", callback_data="education")],
+        ])
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎲 EFF wordlist words", callback_data="meter_eff")],
+        [InlineKeyboardButton("🎯 Dice rolls", callback_data="meter_dice")],
+        [InlineKeyboardButton("🔤 Random characters", callback_data="meter_chars")],
+        [InlineKeyboardButton("🔙 Education", callback_data="education")],
+    ])
+
+
+def meter_back_keyboard(lg):
+    label = "🔙 Medidor" if lg == "es" else "🔙 Meter"
+    return InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data="meter")]])
+
+
+def meter_title(lg):
+    if lg == "es":
+        return ("🔐 *Medidor de fuerza*\n\n¿Cómo vas a crear tu passphrase?\n\n"
+                "⚠️ Solo dime el *formato*, NUNCA escribas tu passphrase real aquí.")
+    return ("🔐 *Strength meter*\n\nHow will you create your passphrase?\n\n"
+            "⚠️ Only tell me the *format*, NEVER type your real passphrase here.")
+
+
+def _crack_time(bits, lg):
+    # Asume 1 billón (10^12) de intentos por segundo. Búsqueda media = 2^(bits-1).
+    imposible = "prácticamente imposible ♾️" if lg == "es" else "practically impossible ♾️"
+    if bits >= 200:
+        return imposible
+    years = (2 ** (bits - 1)) / 1e12 / 31_536_000
+    if years < 1:
+        return "menos de un año 😨" if lg == "es" else "less than a year 😨"
+    if years >= 1e12:  # el universo tiene ~13,800 millones de años
+        return imposible
+    for div, es, en in ((1e9, "miles de millones de años", "billion years"),
+                        (1e6, "millones de años", "million years"),
+                        (1e3, "mil años", "thousand years"),
+                        (1, "años", "years")):
+        if years >= div:
+            return f"~{years / div:,.0f} {es if lg == 'es' else en}"
+    return imposible
+
+
+def meter_result(fmt_key, count, lg):
+    per, name_es, name_en = METER_FORMATS[fmt_key]
+    bits = per * count
+    name = name_es if lg == "es" else name_en
+    if bits < 40:
+        badge = "🔴 *Muy débil*" if lg == "es" else "🔴 *Very weak*"
+    elif bits < 64:
+        badge = "🟠 *Débil*" if lg == "es" else "🟠 *Weak*"
+    elif bits < 80:
+        badge = "🟡 *Aceptable*" if lg == "es" else "🟡 *Acceptable*"
+    elif bits < 128:
+        badge = "🟢 *Fuerte*" if lg == "es" else "🟢 *Strong*"
+    else:
+        badge = "🟢 *Excelente*" if lg == "es" else "🟢 *Excellent*"
+    tip = ""
+    if bits < 128:
+        need = int(128 / per) + 1
+        tip = (f"\n💡 Con *{need} {name}* llegas a 128 bits (🟢 excelente).\n"
+               if lg == "es" else f"\n💡 With *{need} {name}* you reach 128 bits (🟢 excellent).\n")
+    if lg == "es":
+        return (f"🔐 *{count:,} {name}* = *{bits:.1f} bits*\n\n"
+                f"{badge}\nRomperla tomaría {_crack_time(bits, lg)}.\n{tip}\n"
+                "_Asume 1 billón de intentos por segundo._\n"
+                "⚠️ *Nunca escribas tu passphrase real aquí ni en ningún chat.*")
+    return (f"🔐 *{count:,} {name}* = *{bits:.1f} bits*\n\n"
+            f"{badge}\nCracking it would take {_crack_time(bits, lg)}.\n{tip}\n"
+            "_Assumes 1 trillion guesses per second._\n"
+            "⚠️ *Never type your real passphrase here or in any chat.*")
+
+
+async def meter_menu_callback(update, context):
+    query = update.callback_query
+    await query.answer()
+    lg = lang(context)
+    data = query.data
+    if data == "education":
+        title = "📚 *Educación* — elige una categoría:" if lg == "es" else "📚 *Education* — choose a category:"
+        await edit_md(query, title, education_keyboard(lg))
+        return EDU_MENU
+    if data == "meter":
+        await edit_md(query, meter_title(lg), meter_keyboard(lg))
+        return METER_MENU
+    if data in METER_FORMATS:
+        context.user_data["meter_fmt"] = data
+        name = METER_FORMATS[data][1] if lg == "es" else METER_FORMATS[data][2]
+        msg = (f"🔢 ¿Cuántas {name} vas a usar? (ej. 6)" if lg == "es"
+               else f"🔢 How many {name} will you use? (e.g. 6)")
+        await edit_md(query, msg, meter_back_keyboard(lg))
+        return METER_INPUT
+    return METER_MENU
+
+
+async def meter_input(update, context):
+    lg = lang(context)
+    val = parse_number(update.message.text)
+    if val is None or val < 1 or val > 500:
+        await reply_md(update, "❌ Escribe un número del 1 al 500." if lg == "es"
+                       else "❌ Type a number from 1 to 500.", meter_back_keyboard(lg))
+        return METER_INPUT
+    fmt_key = context.user_data.get("meter_fmt", "meter_eff")
+    await reply_md(update, meter_result(fmt_key, int(val), lg), meter_keyboard(lg))
+    return METER_MENU
+
+
 # ─── Alertas de precio (UI) ─────────────────────────────────────────────────────
 def alerts_menu_keyboard(lg):
     if lg == "es":
@@ -2225,6 +2353,11 @@ def main():
             ],
             BROADCAST_CONFIRM: [CallbackQueryHandler(broadcast_confirm_cb, pattern="^bcast_")],
             ADMIN_MENU: [CallbackQueryHandler(admin_menu_callback)],
+            METER_MENU: [CallbackQueryHandler(meter_menu_callback)],
+            METER_INPUT: [
+                CallbackQueryHandler(meter_menu_callback),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, meter_input),
+            ],
             ALERTS_MENU: [CallbackQueryHandler(alerts_menu_callback)],
             ALERT_PRICE: [
                 CallbackQueryHandler(alerts_menu_callback),

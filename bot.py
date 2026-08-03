@@ -353,6 +353,8 @@ def education_keyboard(lg):
         rows.append([InlineKeyboardButton(label, callback_data=m.CATEGORY["key"])])
     rows.append([InlineKeyboardButton("🔐 Medidor de fuerza" if lg == "es" else "🔐 Strength meter",
                                       callback_data="meter")])
+    rows.append([InlineKeyboardButton("🎲 Lista EFF (dados)" if lg == "es" else "🎲 EFF list (dice)",
+                                      callback_data="efflist")])
     rows.append([InlineKeyboardButton("🔙 Menú Principal" if lg == "es" else "🔙 Main Menu",
                                       callback_data="back_main")])
     return InlineKeyboardMarkup(rows)
@@ -528,6 +530,11 @@ async def education_menu_callback(update, context):
     if data == "meter":
         await edit_md(query, meter_title(lg), meter_keyboard(lg))
         return METER_MENU
+    if data == "efflist":
+        await edit_md(query, efflist_text(lg), efflist_keyboard(lg))
+        return EDU_MENU
+    if data == "eff_download":
+        return await send_eff_file(query, lg)
     if data in CAT_BY_KEY:
         cat = CAT_BY_KEY[data]
         label = cat.CATEGORY["btn_es"] if lg == "es" else cat.CATEGORY["btn_en"]
@@ -1402,6 +1409,65 @@ async def quiz_callback(update, context):
         return QUIZ
 
     return QUIZ
+
+
+# ─── Lista EFF (7,776 palabras para dados) ──────────────────────────────────────
+EFF_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "eff_large_wordlist.txt")
+
+
+def efflist_text(lg):
+    if lg == "es":
+        return ("🎲 *Lista EFF* — 7,776 palabras para dados\n\n"
+                "Sirve para crear tu *passphrase* tirando dados, sin computadora y sin "
+                "confiar en nadie.\n\n"
+                "*Cómo se usa:*\n"
+                "1. Tira 5 dados y anota el resultado, ej. 4-2-6-1-3\n"
+                "2. Busca 42613 en la lista → sale _outcome_\n"
+                "3. Repite 6 u 8 veces. Esas son tus palabras.\n\n"
+                "6 palabras = 77 bits · 8 = 103 · 10 = 129 bits 🟢\n\n"
+                "⚠️ *Descarga la lista y haz la búsqueda tú, sin conexión.* "
+                "Nunca escribas aquí las tiradas de tu passphrase real: este chat "
+                "pasa por servidores de Telegram.\n\n"
+                "_Lista pública de la Electronic Frontier Foundation._")
+    return ("🎲 *EFF list* — 7,776 words for dice\n\n"
+            "Use it to build your *passphrase* by rolling dice, with no computer and "
+            "without trusting anyone.\n\n"
+            "*How to use it:*\n"
+            "1. Roll 5 dice and write the result, e.g. 4-2-6-1-3\n"
+            "2. Look up 42613 in the list → you get _outcome_\n"
+            "3. Repeat 6 or 8 times. Those are your words.\n\n"
+            "6 words = 77 bits · 8 = 103 · 10 = 129 bits 🟢\n\n"
+            "⚠️ *Download the list and do the lookup yourself, offline.* "
+            "Never type your real passphrase rolls here: this chat goes through "
+            "Telegram servers.\n\n"
+            "_Public wordlist by the Electronic Frontier Foundation._")
+
+
+def efflist_keyboard(lg):
+    if lg == "es":
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("📄 Descargar la lista", callback_data="eff_download")],
+            [InlineKeyboardButton("🔙 Educación", callback_data="education")],
+        ])
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📄 Download the list", callback_data="eff_download")],
+        [InlineKeyboardButton("🔙 Education", callback_data="education")],
+    ])
+
+
+async def send_eff_file(query, lg):
+    caption = ("🎲 Lista EFF — 7,776 palabras.\nGuárdala e imprímela. Úsala sin conexión. 🔒"
+               if lg == "es" else
+               "🎲 EFF list — 7,776 words.\nSave it and print it. Use it offline. 🔒")
+    try:
+        with open(EFF_PATH, "rb") as f:
+            await query.message.reply_document(document=f, filename="eff_large_wordlist.txt",
+                                               caption=caption)
+    except Exception as e:
+        logger.warning("eff file: %s", e)
+        await query.message.reply_text("⚠️ No pude enviar el archivo." if lg == "es"
+                                       else "⚠️ Couldn't send the file.")
+    return EDU_MENU
 
 
 # ─── Medidor de fuerza (solo formato, NUNCA la passphrase real) ────────────────

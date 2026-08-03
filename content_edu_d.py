@@ -4,7 +4,7 @@ CATEGORY = {
     "btn_en": "🛠️ Practice & mindset",
 }
 
-ORDER = ["edu_d1", "edu_d2", "edu_d3", "edu_d4", "edu_d5", "edu_d6"]
+ORDER = ["edu_d1", "edu_d2", "edu_d3", "edu_d4", "edu_d5", "edu_d6", "edu_d7"]
 
 MODULES = {
     "edu_d1": {
@@ -182,6 +182,76 @@ En 2026 pasó justo eso: un fallo en las Coldcard hacía que las semillas salier
 *La regla de oro:* nunca dejes que un tercero genere tu azar. Ni una web, ni un bot, ni una IA. El único azar en el que puedes confiar es el que tiras tú con tus manos.
 
 _No confíes, verifica._""",
+        "en": """*Entropy: the randomness that protects your bitcoin*
+
+Your seed phrase is born from a random number. That randomness is called _entropy_, and it's measured in bits. With 128 bits there are so many combinations that guessing is impossible. With 40 bits, a computer cracks it in minutes.
+
+In 2026 exactly that happened: a Coldcard flaw generated seeds with ~40-72 bits instead of 128. When it went public, about *594 BTC (38 million dollars)* were swept from ~500 wallets in minutes.
+
+Who was safe? The people who created their seed with *their own dice*.
+
+*How to generate your own entropy:*
+• One regular die gives 2.58 bits. *50 rolls = 129 bits*, more than enough.
+• With the EFF list, every 5 dice give you one word (7,776 = 6 to the 5th). Six words is already 77 bits.
+• Write everything on paper, offline. Never in photos, cloud or chats.
+
+*The golden rule:* never let a third party generate your randomness. Not a website, not a bot, not an AI. The only randomness you can trust is the one you roll yourself.
+
+_Don't trust, verify._""",
+    },
+    "edu_d7": {
+        "btn_es": "🎲 Dados: EFF vs BIP39",
+        "btn_en": "🎲 Dice: EFF vs BIP39",
+        "es": """*Dados: lista EFF vs lista BIP39*
+
+Mucha gente las confunde. Son *dos listas distintas, para cosas distintas.*
+
+*📋 Lista EFF* — 7,776 palabras, 12.9 bits cada una. Sirve para tu *passphrase* (la palabra extra encima de la semilla). La hizo la Electronic Frontier Foundation.
+
+*📋 Lista BIP39* — 2,048 palabras, 11 bits cada una. Son las *12 o 24 palabras de tu semilla*. Es el estándar de Bitcoin.
+
+*Caso 1: passphrase con EFF, los dados dan la palabra directo* ✅
+La lista tiene 7,776 palabras porque 6 elevado a 5 es exactamente 7,776. Cinco tiradas apuntan a una palabra:
+tiras 4-2-6-1-3, buscas 42613 en la lista, sale _outcome_.
+Repites 6 u 8 veces y ya tienes tu passphrase. Sin computadora, sin confiar en nadie.
+
+*Caso 2: semilla BIP39 con dados, NO es directo* ⚠️
+No puedes buscar palabra por palabra, por dos razones:
+• 2,048 no es potencia de 6, los dados no caen limpio en esa lista.
+• La última palabra lleva un _checksum_: no es libre, se calcula. Por eso Jade y Coldcard dicen "yo calculo la última palabra".
+
+Lo que hacen los dispositivos: tiras 50 o más dados y el aparato convierte ese azar en tus 12 o 24 palabras. Tú pones la aleatoriedad, él solo traduce. Eso fue lo que salvó a la gente en el fallo de Coldcard: aunque el chip fallara, *el azar era suyo*.
+
+*Resumen:*
+• Dados + EFF = palabras directo, para tu passphrase.
+• Dados + dispositivo = tu semilla BIP39 (el azar lo pones tú).
+
+_No confíes, verifica._""",
+        "en": """*Dice: EFF list vs BIP39 list*
+
+People mix them up. They are *two different lists, for two different jobs.*
+
+*📋 EFF list* — 7,776 words, 12.9 bits each. It's for your *passphrase* (the extra word on top of the seed). Made by the Electronic Frontier Foundation.
+
+*📋 BIP39 list* — 2,048 words, 11 bits each. These are the *12 or 24 words of your seed*. It's the Bitcoin standard.
+
+*Case 1: passphrase with EFF, dice give the word directly* ✅
+The list has 7,776 words because 6 to the 5th is exactly 7,776. Five rolls point to one word:
+roll 4-2-6-1-3, look up 42613, you get _outcome_.
+Repeat 6 or 8 times and your passphrase is done. No computer, no trusting anyone.
+
+*Case 2: BIP39 seed with dice, NOT direct* ⚠️
+You can't look up word by word, for two reasons:
+• 2,048 is not a power of 6, dice don't map cleanly onto that list.
+• The last word carries a _checksum_: it isn't free, it's computed. That's why Jade and Coldcard say "I'll calculate the last word".
+
+What devices do: you roll 50 or more dice and the device turns that randomness into your 12 or 24 words. You supply the randomness, it only translates. That's what saved people in the Coldcard flaw: even with a faulty chip, *the randomness was theirs*.
+
+*Summary:*
+• Dice + EFF = words directly, for your passphrase.
+• Dice + device = your BIP39 seed (you supply the randomness).
+
+_Don't trust, verify._""",
         "en": """*Entropy: the randomness that protects your bitcoin*
 
 Your seed phrase is born from a random number. That randomness is called _entropy_, and it's measured in bits. With 128 bits there are so many combinations that guessing is impossible. With 40 bits, a computer cracks it in minutes.

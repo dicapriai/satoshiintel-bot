@@ -4,7 +4,8 @@ CATEGORY = {
     "btn_en": "🔒 Advanced security",
 }
 
-ORDER = ["edu_e1", "edu_e2", "edu_e3", "edu_e4", "edu_e5"]
+ORDER = ["edu_e1", "edu_e2", "edu_e3", "edu_e4", "edu_e5",
+         "edu_e6", "edu_e7", "edu_e8"]
 
 MODULES = {
     "edu_e1": {
@@ -234,6 +235,126 @@ If it matches, your backup works. If it doesn't, you just saved yourself from lo
 • Repeat this check now and then, especially if you change paper or location.
 
 A backup you never tested isn't a backup: it's a hope.
+
+_Don't trust, verify._""",
+    },
+    "edu_e6": {
+        "btn_es": "🎲 Crea tu semilla con dados",
+        "btn_en": "🎲 Create your seed with dice",
+        "es": """*Crea tu semilla con dados*
+
+Sí se puede crear tu semilla con dados. Lo que no se puede es armarla con la lista EFF: esa es de otro estándar y sirve para la passphrase. Los dados llegan a la semilla por otro camino.
+
+*Camino 1: dados, el que usan Coldcard y Jade*
+Tiras 50 o más dados y escribes los números en el dispositivo. El aparato aplica SHA-256 a esa cadena y obtiene 128 o 256 bits de entropía, que se convierten en tus 12 o 24 palabras.
+Tú pones el azar, el dispositivo solo traduce.
+
+Lo mejor: el proceso es *determinista*. Las mismas tiradas dan siempre la misma semilla, así que puedes comprobar el resultado por tu cuenta con otra herramienta sin conexión. Ya no dependes de confiar en el fabricante.
+
+*Camino 2: eliges tus propias palabras*
+Puedes escribir palabras elegidas por ti, pero no las 12 completas: la última lleva un _checksum_ y la calcula el dispositivo. Tú aportas las primeras 11 o 23.
+Con monedas queda limpio: 2,048 es 2 elevado a 11, así que 11 tiros dan una palabra (cara 1, cruz 0).
+
+*Referencia:* 50 tiradas de dado son 129 bits, más que suficiente.
+
+_No confíes, verifica._""",
+        "en": """*Create your seed with dice*
+
+You can create your seed with dice. What you cannot do is build it from the EFF list: that one belongs to another standard and is for the passphrase. Dice reach the seed by a different route.
+
+*Route 1: dice, the one Coldcard and Jade use*
+You roll 50 or more dice and type the numbers into the device. It applies SHA-256 to that string and gets 128 or 256 bits of entropy, which become your 12 or 24 words.
+You supply the randomness, the device only translates.
+
+The best part: the process is *deterministic*. The same rolls always give the same seed, so you can verify the result yourself with another offline tool. You no longer depend on trusting the manufacturer.
+
+*Route 2: you pick your own words*
+You can type words you chose, but not all 12: the last one carries a _checksum_ and the device computes it. You supply the first 11 or 23.
+Coins map cleanly: 2,048 is 2 to the 11th, so 11 flips give one word (heads 1, tails 0).
+
+*Reference:* 50 dice rolls are 129 bits, more than enough.
+
+_Don't trust, verify._""",
+    },
+    "edu_e7": {
+        "btn_es": "🔑 Passphrase: dados vs inventarla",
+        "btn_en": "🔑 Passphrase: dice vs inventing it",
+        "es": """*Passphrase: con dados o inventada*
+
+La idea que casi nadie entiende: *la fuerza está en el proceso, no en la apariencia.*
+
+Un atacante no prueba al azar. Usa diccionarios de contraseñas filtradas y un motor de reglas que ya prueba automáticamente todos los trucos humanos: cambiar a por 4, e por 3, o por 0, poner mayúscula al inicio, añadir un año, terminar en símbolo, nombres de mascotas y equipos en cada idioma.
+
+Por eso:
+• Perr0Firulais2015 aparenta mucho y son unos *35 bits*. Cae en minutos.
+• Seis palabras EFF sacadas con dados parecen simplonas y son *77.6 bits*. Imposible.
+
+*¿Y una inventada larga y rara?*
+Si de verdad no contiene palabras de diccionario, puede ser fuerte. El problema es otro:
+• No puedes *medir* su fuerza. Crees que es sólida, pero no lo sabes.
+• No puedes *reproducirla*. ¿Eran dos símbolos o tres? ¿Un espacio o dos? ¿Mayúscula dónde?
+
+Y recuerda: no existe el aviso de contraseña incorrecta. Un carácter distinto abre una wallet vacía, igual que si te hubieran robado.
+
+Se ha perdido más Bitcoin por respaldos mal hechos que por hackeos. Los dados te dan fuerza comprobable *y* algo que podrás copiar exacto dentro de veinte años.
+
+_No confíes, verifica._""",
+        "en": """*Passphrase: with dice or invented*
+
+The idea almost nobody gets: *strength lives in the process, not in the appearance.*
+
+An attacker doesn't guess randomly. He uses leaked password dictionaries and a rules engine that already tries every human trick automatically: swap a for 4, e for 3, o for 0, capitalize the first letter, append a year, end with a symbol, pet and team names in every language.
+
+So:
+• Perr0Firulais2015 looks impressive and is about *35 bits*. It falls in minutes.
+• Six EFF words rolled with dice look plain and are *77.6 bits*. Impossible.
+
+*What about a long weird invented one?*
+If it truly contains no dictionary words, it can be strong. The problem is a different one:
+• You cannot *measure* its strength. You think it's solid, but you don't know.
+• You cannot *reproduce* it. Two symbols or three? One space or two? Capital where?
+
+And remember: there is no wrong-password warning. One different character opens an empty wallet, exactly as if you had been robbed.
+
+More Bitcoin has been lost to bad backups than to hacks. Dice give you provable strength *and* something you can copy exactly twenty years from now.
+
+_Don't trust, verify._""",
+    },
+    "edu_e8": {
+        "btn_es": "🕵️ Cómo funciona un ataque real",
+        "btn_en": "🕵️ How a real attack works",
+        "es": """*Cómo funciona un ataque real*
+
+Mucha gente cree que el atacante la investiga: su nombre, sus hijos, su mascota. Falso. El ataque es *masivo, ciego y automático*.
+
+*El proceso real:*
+Genera todas las semillas posibles con la entropía débil, deriva sus direcciones, las busca en la blockchain (que es pública y gratis de consultar) y barre las que tienen saldo. Sin ningún dato personal. Por eso se vacían cientos de wallets en minutos: es un script, no alguien espiándote.
+
+*¿Sabe si tienes passphrase?* No, y eso es lo mejor.
+No existe ninguna marca en la blockchain que lo indique. Con passphrase salen direcciones completamente distintas. Cuando él mira tus direcciones sin passphrase, ve vacío, exactamente igual que una semilla nunca usada. Pasa de largo.
+
+Ojo con una cosa: si tu wallet señuelo tiene *historial* de movimientos, le estás avisando que esa semilla es real y que alguien la usa. Eso sí lo motiva a atacar la passphrase.
+
+*Si ataca la passphrase:* prueba millones de candidatas por segundo en su computadora y compara contra *todas las direcciones con saldo* de Bitcoin a la vez. No necesita conocer la tuya.
+
+*La economía te protege:* tiene millones de semillas. Va por el 99% fácil, los que no tenían passphrase.
+
+_No confíes, verifica._""",
+        "en": """*How a real attack works*
+
+Many people think the attacker researches them: their name, their kids, their pet. False. The attack is *massive, blind and automated*.
+
+*The real process:*
+It generates every possible seed from the weak entropy, derives their addresses, looks them up on the blockchain (public and free to query) and sweeps the ones holding funds. No personal data at all. That's why hundreds of wallets are emptied in minutes: it's a script, not someone spying on you.
+
+*Does he know if you have a passphrase?* No, and that's the beauty.
+There is no marker on the blockchain showing it. With a passphrase you get completely different addresses. When he checks your passphrase-less addresses he sees empty, exactly like a seed that was never used. He moves on.
+
+One caveat: if your decoy wallet has transaction *history*, you are telling him that seed is real and someone uses it. That does motivate him to attack the passphrase.
+
+*If he attacks the passphrase:* he tries millions of candidates per second on his own machine and compares against *every funded Bitcoin address* at once. He doesn't need to know yours.
+
+*Economics protect you:* he holds millions of seeds. He goes for the easy 99%, the ones with no passphrase.
 
 _Don't trust, verify._""",
     },

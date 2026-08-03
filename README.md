@@ -23,7 +23,7 @@ SatoshiIntel es un bot educativo de Bitcoin con herramientas en vivo, pensado pa
 - 🧮 ¿UTXO gastable o polvo?
 
 ### 📚 Aprende
-- 🎓 27 lecciones (fundamentos del dinero, cómo funciona, historia, práctica, seguridad avanzada)
+- 🎓 30 lecciones (fundamentos del dinero, cómo funciona, historia, práctica, seguridad avanzada)
 - 🔐 Medidor de fuerza de passphrase y lista EFF para generar entropía con dados
 - 📖 Diccionario Bitcoin con más de 90 términos
 - 🔤 Lista BIP39 (las 2048 palabras oficiales)

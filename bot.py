@@ -22,7 +22,7 @@ from telegram.ext import (
     MessageHandler, ConversationHandler, ContextTypes, filters, TypeHandler
 )
 
-import content_edu_a, content_edu_b, content_edu_c, content_edu_d
+import content_edu_a, content_edu_b, content_edu_c, content_edu_d, content_edu_e
 import content_quotes
 import content_dict_a, content_dict_b, content_dict_c, content_dict_d, content_dict_e
 import content_quiz
@@ -94,7 +94,7 @@ _height_cache = {"height": None, "ts": 0.0}
 ) = range(22)
 
 # ─── Registro de educación (carga dinámica) ────────────────────────────────────
-EDU_CATS = [content_edu_a, content_edu_b, content_edu_c, content_edu_d]
+EDU_CATS = [content_edu_a, content_edu_b, content_edu_c, content_edu_d, content_edu_e]
 CAT_BY_KEY = {m.CATEGORY["key"]: m for m in EDU_CATS}
 MODULE_TO_CAT = {}
 for _m in EDU_CATS:

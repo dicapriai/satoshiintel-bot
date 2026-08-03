@@ -207,10 +207,22 @@ La solución es probar el respaldo *antes* de meter fondos serios.
 
 Si coincide, tu respaldo sirve. Si no, acabas de salvarte de perderlo todo, y aún estás a tiempo.
 
+*La huella maestra: tu mejor aliado* 🔎
+Toda wallet muestra un código de ocho caracteres llamado _master fingerprint_ o XFP, por ejemplo A1B2C3D4. Lo verás en Coldcard, Jade, Sparrow o Electrum.
+
+Lo importante es esto:
+• Tu semilla sola da una huella.
+• Tu semilla *con* la passphrase da una huella *distinta*.
+• Y si escribes la passphrase con un error, da otra huella diferente.
+
+Como no existe el aviso de contraseña incorrecta, la huella es tu única forma rápida de saber si entraste a la wallet correcta. Anótala hoy junto a tu respaldo, y el día que restaures compárala: si coincide, escribiste todo bien. Si no coincide, hay un error y aún estás a tiempo de corregirlo.
+
+Anota las dos: la de la semilla sola y la de la semilla con passphrase.
+
 *Reglas:*
 • Hazlo todo sin conexión. Nunca escribas tu semilla en una web, una app, un chat ni una IA.
+• La huella no revela tus claves, es seguro anotarla. Pero no la publiques: identifica tu wallet.
 • Cuando muevas fondos a una wallet nueva, manda primero una cantidad pequeña de prueba.
-• Repite esta verificación de vez en cuando, sobre todo si cambias de papel o de lugar.
 
 Un respaldo que nunca probaste no es un respaldo: es una esperanza.
 
@@ -229,10 +241,22 @@ The fix is testing the backup *before* putting serious funds in.
 
 If it matches, your backup works. If it doesn't, you just saved yourself from losing everything, and you still have time.
 
+*The master fingerprint: your best ally* 🔎
+Every wallet shows an eight character code called the _master fingerprint_ or XFP, for example A1B2C3D4. You'll see it on Coldcard, Jade, Sparrow or Electrum.
+
+Here's what matters:
+• Your seed alone gives one fingerprint.
+• Your seed *with* the passphrase gives a *different* one.
+• And if you type the passphrase with a mistake, it gives yet another one.
+
+Since there is no wrong-password warning, the fingerprint is your only quick way to know you entered the right wallet. Write it down today next to your backup, and compare it the day you restore: if it matches, you typed everything correctly. If it doesn't, something is wrong and you still have time to fix it.
+
+Write both down: the one for the seed alone and the one for seed plus passphrase.
+
 *Rules:*
 • Do it all offline. Never type your seed into a website, an app, a chat or an AI.
+• The fingerprint doesn't reveal your keys, it's safe to write down. But don't publish it: it identifies your wallet.
 • When moving funds to a new wallet, send a small test amount first.
-• Repeat this check now and then, especially if you change paper or location.
 
 A backup you never tested isn't a backup: it's a hope.
 

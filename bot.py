@@ -60,6 +60,8 @@ DONATION_POOL = 20          # rota entre 20 direcciones (dentro del gap limit de
 _donation_counter = 0
 # ─── Canal y soporte ────────────────────────────────────────────────────────────
 CHANNEL_URL = "https://t.me/SatoshiIntel"
+# Código abierto: el usuario no tiene que creerse lo que dice el bot, puede leerlo.
+REPO_URL = "https://github.com/dicapriai/satoshiintel-bot"
 CHANNEL_HANDLE = "@SatoshiIntel"
 SUPPORT_EMAIL = "SatoshiIntelbot@proton.me"
 HALVING_INTERVAL = 210_000
@@ -282,6 +284,7 @@ def main_menu_keyboard(lg, admin=False):
             [InlineKeyboardButton("💰 Precio de Bitcoin ahora", callback_data="price_now")],
             [InlineKeyboardButton("💬 Cita del día", callback_data="cita")],
             [InlineKeyboardButton("🧡 Apoya el proyecto", callback_data="donate")],
+            [InlineKeyboardButton("🔓 Código abierto", callback_data="opensource")],
             [InlineKeyboardButton("📢 Únete al canal", url=CHANNEL_URL)],
             [InlineKeyboardButton("📧 Soporte", callback_data="support")],
             [InlineKeyboardButton("🌎 Cambiar idioma", callback_data="change_lang")],
@@ -296,6 +299,7 @@ def main_menu_keyboard(lg, admin=False):
             [InlineKeyboardButton("💰 Bitcoin Price Now", callback_data="price_now")],
             [InlineKeyboardButton("💬 Quote of the day", callback_data="cita")],
             [InlineKeyboardButton("🧡 Support the project", callback_data="donate")],
+            [InlineKeyboardButton("🔓 Open source", callback_data="opensource")],
             [InlineKeyboardButton("📢 Join our channel", url=CHANNEL_URL)],
             [InlineKeyboardButton("📧 Support", callback_data="support")],
             [InlineKeyboardButton("🌎 Change language", callback_data="change_lang")],
@@ -452,6 +456,44 @@ def cita_text(lg):
     return f"{header}\n\n_{body}_\n\n— {q['author']}"
 
 
+def opensource_text(lg):
+    """El bot promete privacidad; aquí se le dice al usuario cómo comprobarlo.
+
+    La gracia no es decir "somos open source" (eso lo dice todo el mundo), sino
+    señalar QUÉ mirar. Un usuario que no programa puede verificar lo esencial
+    buscando dos palabras en un archivo.
+    """
+    if lg == "es":
+        return ("🔓 *Código abierto*\n\n"
+                "Este bot te dice que tus consultas son privadas. "
+                "*No tienes por qué creerme.* El código está publicado entero para que lo compruebes.\n\n"
+                "Qué puedes verificar tú mismo, sin saber programar:\n\n"
+                "• *No guardo lo que consultas.* En todo el bot solo hay dos escrituras a la base de datos: "
+                "una te registra y otra guarda una alerta que tú creaste. No existe ninguna tabla de consultas.\n\n"
+                "• *Tus direcciones no salen a empresas.* Las resuelve mi propio nodo Bitcoin. "
+                "Si el nodo cae, el bot te dice \"no disponible\" en vez de preguntarle a un tercero.\n\n"
+                "• *Nunca te pido tu frase semilla.* Búscala en el código: solo aparece para advertirte "
+                "que no la compartas con nadie.\n\n"
+                "El README te dice el archivo exacto donde mirar cada cosa.\n\n"
+                "⭐ *Si te parece bien lo que ves, déjame una estrella en GitHub.* "
+                "Es gratis, y ayuda a que otros bitcoiners lo encuentren.\n\n"
+                "_No confíes, verifica._")
+    return ("🔓 *Open source*\n\n"
+            "This bot tells you your queries are private. "
+            "*You don't have to take my word for it.* The whole code is published so you can check.\n\n"
+            "What you can verify yourself, without being a programmer:\n\n"
+            "• *I don't store what you look up.* The entire bot has only two database writes: "
+            "one registers you, one saves an alert you created. There's no table for queries.\n\n"
+            "• *Your addresses don't go to companies.* My own Bitcoin node answers them. "
+            "If the node is down, the bot says \"unavailable\" instead of asking a third party.\n\n"
+            "• *I never ask for your seed phrase.* Search for it in the code: it only shows up to warn you "
+            "never to share it with anyone.\n\n"
+            "The README points to the exact file for each claim.\n\n"
+            "⭐ *If you like what you see, leave me a star on GitHub.* "
+            "It's free, and it helps other bitcoiners find it.\n\n"
+            "_Don't trust, verify._")
+
+
 def support_text(lg):
     if lg == "es":
         return ("📧 *Soporte y contacto*\n\n"
@@ -498,6 +540,16 @@ async def main_menu_callback(update, context):
         return ADMIN_MENU
     if data == "support":
         await edit_md(query, support_text(lg), main_menu_keyboard(lg, is_admin(update)))
+        return MAIN_MENU
+    if data == "opensource":
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("👀 Ver el código" if lg == "es" else "👀 See the code", url=REPO_URL)],
+            [InlineKeyboardButton("⭐ Dejar una estrella" if lg == "es" else "⭐ Leave a star",
+                                  url=REPO_URL)],
+            [InlineKeyboardButton("🔙 Menú Principal" if lg == "es" else "🔙 Main Menu",
+                                  callback_data="back_main")],
+        ])
+        await edit_md(query, opensource_text(lg), kb)
         return MAIN_MENU
     if data == "price_now":
         price = await get_btc_price()

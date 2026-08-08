@@ -1,0 +1,29 @@
+[Unit]
+Description=SatoshiIntel (bot gratis de Bitcoin)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=satoshiintel
+WorkingDirectory=/opt/satoshiintel/app
+ExecStart=/opt/satoshiintel/venv/bin/python bot.py
+Restart=always
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+# Carga el .env como variables de entorno REALES antes de arrancar Python.
+# Igual que en Guardian: varios módulos leen os.environ al importarse, es decir
+# ANTES de que bot.py llame a load_dotenv().
+EnvironmentFile=/opt/satoshiintel/app/.env
+
+# Endurecimiento: el bot no necesita ser root ni tocar nada fuera de lo suyo.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/satoshiintel/data
+
+[Install]
+WantedBy=multi-user.target

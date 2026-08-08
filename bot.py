@@ -9,6 +9,8 @@ import time
 import random
 import httpx
 import qrcode
+
+import sources
 from bip_utils import Bip32Slip10Secp256k1, P2WPKHAddr
 
 try:
@@ -182,8 +184,9 @@ async def get_block_height() -> int | None:
         return _height_cache["height"]
     try:
         async with httpx.AsyncClient(timeout=10) as c:
-            r = await c.get("https://mempool.space/api/blocks/tip/height")
-            r.raise_for_status()
+            r = await sources.get_publico(c, "/blocks/tip/height")
+            if r is None:
+                raise RuntimeError("altura no disponible")
             h = int(r.text.strip())
             _height_cache.update(height=h, ts=now)
             return h
@@ -193,17 +196,17 @@ async def get_block_height() -> int | None:
 
 
 async def get_mempool_data():
-    """Devuelve (fees_dict, count) de mempool.space. None si falla."""
+    """Devuelve (fees_dict, count). Nodo propio si lo hay, si no la API pública."""
     try:
         async with httpx.AsyncClient(timeout=10) as c:
-            r1 = await c.get("https://mempool.space/api/v1/fees/recommended")
-            r1.raise_for_status()
+            r1 = await sources.get_publico(c, "/v1/fees/recommended")
+            if r1 is None:
+                raise RuntimeError("comisiones no disponibles")
             fees = r1.json()
             count = None
             try:
-                r2 = await c.get("https://mempool.space/api/mempool")
-                r2.raise_for_status()
-                count = r2.json().get("count")
+                r2 = await sources.get_publico(c, "/mempool")
+                count = r2.json().get("count") if r2 else None
             except Exception:
                 pass
             return fees, count
@@ -247,7 +250,7 @@ async def mempool_text(lg):
                 f"• 🐢 1 hora: *{hour}*\n"
                 f"• 💲 Económica: *{eco}*\n\n"
                 f"Enviar una transacción típica costaría {cost_es}\n\n"
-                "_Datos en vivo de mempool.space._")
+                f"_Datos en vivo {sources.fuente('es')}._")
     return ("🌐 *Live Mempool — network status*\n\n"
             f"{sem} Network: *{estado_en}*\n"
             f"{count_line_en}\n"
@@ -257,7 +260,7 @@ async def mempool_text(lg):
             f"• 🐢 1 hour: *{hour}*\n"
             f"• 💲 Economy: *{eco}*\n\n"
             f"A typical transaction would cost {cost_en}\n\n"
-            "_Live data from mempool.space._")
+            f"_Live data {sources.fuente('en')}._")
 
 
 # ─── Teclados ───────────────────────────────────────────────────────────────────
@@ -1725,8 +1728,8 @@ async def explorer_input(update, context):
 
 async def lookup_tx(txid, lg):
     try:
-        async with httpx.AsyncClient(timeout=10) as c:
-            r = await c.get(f"https://mempool.space/api/tx/{txid}")
+        async with sources.cliente(timeout=15) as c:
+            r = await c.get(f"{sources.API}/tx/{txid}")
             if r.status_code == 404:
                 return "❌ No encontré esa transacción." if lg == "es" else "❌ Transaction not found."
             r.raise_for_status()
@@ -1752,18 +1755,18 @@ async def lookup_tx(txid, lg):
                 f"{estado_es}\n\n"
                 f"💰 Monto total: *{fmt_sats(total_out)} sats* ({fmt_btc(total_out/SATS_PER_BTC)} BTC)\n"
                 f"💸 Comisión: *{fmt_sats(fee)} sats* ({feerate:.1f} sats/vByte)\n"
-                f"📏 Tamaño: {vsize:,} vBytes\n\n_Datos de mempool.space._")
+                f"📏 Tamaño: {vsize:,} vBytes\n\n_Datos {sources.fuente('es')}._")
     return ("🔎 *Transaction*\n\n"
             f"{estado_en}\n\n"
             f"💰 Total amount: *{fmt_sats(total_out)} sats* ({fmt_btc(total_out/SATS_PER_BTC)} BTC)\n"
             f"💸 Fee: *{fmt_sats(fee)} sats* ({feerate:.1f} sats/vByte)\n"
-            f"📏 Size: {vsize:,} vBytes\n\n_Data from mempool.space._")
+            f"📏 Size: {vsize:,} vBytes\n\n_Data {sources.fuente('en')}._")
 
 
 async def lookup_address(addr, lg):
     try:
-        async with httpx.AsyncClient(timeout=10) as c:
-            r = await c.get(f"https://mempool.space/api/address/{addr}")
+        async with sources.cliente(timeout=15) as c:
+            r = await c.get(f"{sources.API}/address/{addr}")
             if r.status_code in (400, 404):
                 return "❌ Dirección no válida o sin datos." if lg == "es" else "❌ Invalid address or no data."
             r.raise_for_status()
@@ -1784,13 +1787,13 @@ async def lookup_address(addr, lg):
                 f"💰 Saldo: *{fmt_sats(balance)} sats* ({fmt_btc(balance/SATS_PER_BTC)} BTC)\n"
                 f"📥 Recibido total: {fmt_sats(funded)} sats\n"
                 f"📤 Enviado total: {fmt_sats(spent)} sats\n"
-                f"🔁 Transacciones: {txcount:,}\n\n_Datos de mempool.space._")
+                f"🔁 Transacciones: {txcount:,}\n\n_Datos {sources.fuente('es')}._")
     return ("🔎 *Address*\n\n"
             f"{tline}"
             f"💰 Balance: *{fmt_sats(balance)} sats* ({fmt_btc(balance/SATS_PER_BTC)} BTC)\n"
             f"📥 Total received: {fmt_sats(funded)} sats\n"
             f"📤 Total sent: {fmt_sats(spent)} sats\n"
-            f"🔁 Transactions: {txcount:,}\n\n_Data from mempool.space._")
+            f"🔁 Transactions: {txcount:,}\n\n_Data {sources.fuente('en')}._")
 
 
 async def addrtype_input(update, context):
@@ -2356,7 +2359,7 @@ def main():
     if not TOKEN:
         raise SystemExit(
             "\n⚠️  Falta el token. Pon TELEGRAM_BOT_TOKEN en un archivo .env\n"
-            "   (local) o como variable de entorno (Railway).\n"
+            "   o como variable de entorno. Lo obtienes de @BotFather.\n"
             "   Ejemplo .env:  TELEGRAM_BOT_TOKEN=123456:ABC...\n"
         )
 

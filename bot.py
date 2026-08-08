@@ -11,6 +11,7 @@ import httpx
 import qrcode
 
 import sources
+import ratelimit
 from bip_utils import Bip32Slip10Secp256k1, P2WPKHAddr
 
 try:
@@ -1764,9 +1765,20 @@ async def alert_price_input(update, context):
 async def explorer_input(update, context):
     lg = lang(context)
     q = update.message.text.strip()
-    if re.fullmatch(r"[0-9a-fA-F]{64}", q):
+    es_txid = bool(re.fullmatch(r"[0-9a-fA-F]{64}", q))
+    es_dir = bool(re.fullmatch(r"(bc1[a-z0-9]{8,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,39})", q))
+
+    # El cupo solo se consume cuando la consulta va a llegar al nodo. Lo que no
+    # se reconoce no cuesta nada, así que no debe gastar cupo a nadie.
+    if es_txid or es_dir:
+        ok, espera = ratelimit.permitido(update.effective_user.id)
+        if not ok:
+            await reply_md(update, ratelimit.aviso(lg, espera), tools_back_keyboard(lg))
+            return EXPLORER_INPUT
+
+    if es_txid:
         text = await lookup_tx(q, lg)
-    elif re.fullmatch(r"(bc1[a-z0-9]{8,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,39})", q):
+    elif es_dir:
         text = await lookup_address(q, lg)
     else:
         text = ("❌ No reconozco eso. Pega un *TXID* (64 caracteres) o una *dirección* "
@@ -1780,7 +1792,7 @@ async def explorer_input(update, context):
 
 async def lookup_tx(txid, lg):
     try:
-        async with sources.cliente(timeout=15) as c:
+        async with ratelimit.nodo(), sources.cliente(timeout=15) as c:
             r = await c.get(f"{sources.API}/tx/{txid}")
             if r.status_code == 404:
                 return "❌ No encontré esa transacción." if lg == "es" else "❌ Transaction not found."
@@ -1817,7 +1829,7 @@ async def lookup_tx(txid, lg):
 
 async def lookup_address(addr, lg):
     try:
-        async with sources.cliente(timeout=15) as c:
+        async with ratelimit.nodo(), sources.cliente(timeout=15) as c:
             r = await c.get(f"{sources.API}/address/{addr}")
             if r.status_code in (400, 404):
                 return "❌ Dirección no válida o sin datos." if lg == "es" else "❌ Invalid address or no data."

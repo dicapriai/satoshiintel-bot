@@ -6,3 +6,5 @@ venv/
 .DS_Store
 .gstack/
 respaldo/
+*.db
+_test_*.db

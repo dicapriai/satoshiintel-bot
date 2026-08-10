@@ -10,6 +10,7 @@ import random
 import httpx
 import qrcode
 
+import contenido
 import sources
 import ratelimit
 from bip_utils import Bip32Slip10Secp256k1, P2WPKHAddr
@@ -22,7 +23,8 @@ except ImportError:
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
-    MessageHandler, ConversationHandler, ContextTypes, filters, TypeHandler
+    MessageHandler, ConversationHandler, ContextTypes, filters, TypeHandler,
+    ApplicationHandlerStop
 )
 
 import content_edu_a, content_edu_b, content_edu_c, content_edu_d, content_edu_e
@@ -45,6 +47,10 @@ logger = logging.getLogger(__name__)
 # 🔒 Privacidad: que httpx NO registre las URLs (contienen direcciones/TXID del usuario).
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
+# Silenciar a httpx no basta: el texto de sus EXCEPCIONES lleva la URL entera,
+# y con ella la dirección consultada y el nombre del nodo. Se tacha a la salida.
+import censura
+censura.instalar()
 
 # ─── Config ─────────────────────────────────────────────────────────────────────
 # Crea tu bot con @BotFather y pon el token en la variable de entorno
@@ -372,7 +378,7 @@ def category_keyboard(cat_mod, lg):
     rows = []
     for k in cat_mod.ORDER:
         mod = cat_mod.MODULES[k]
-        label = mod["btn_es"] if lg == "es" else mod["btn_en"]
+        label = contenido.leccion_btn(k, lg, mod["btn_es"] if lg == "es" else mod["btn_en"])
         rows.append([InlineKeyboardButton(label, callback_data=k)])
     rows.append([InlineKeyboardButton("🔙 Educación" if lg == "es" else "🔙 Education",
                                       callback_data="education")])
@@ -451,9 +457,10 @@ def price_text(lg, price):
 
 
 def cita_text(lg):
-    q = random.choice(content_quotes.QUOTES)
+    i = random.randrange(len(content_quotes.QUOTES))
+    q = content_quotes.QUOTES[i]
     header = "💬 *Cita del día*" if lg == "es" else "💬 *Quote of the day*"
-    body = q["es"] if lg == "es" else q["en"]
+    body = contenido.texto(f"cita.{i}", lg, q["es"] if lg == "es" else q["en"])
     return f"{header}\n\n_{body}_\n\n— {q['author']}"
 
 
@@ -620,7 +627,7 @@ async def edu_cat_callback(update, context):
         return EDU_CAT
     if data in MODULE_TO_CAT:
         cat = MODULE_TO_CAT[data]
-        text = cat.MODULES[data][lg]
+        text = contenido.leccion(data, lg, cat.MODULES[data][lg])
         await edit_md(query, text, module_keyboard(cat, lg))
         return EDU_CAT
     return EDU_CAT
@@ -1089,7 +1096,7 @@ def dict_category_keyboard(cat, lg):
     rows = []
     for tk in cat["order"]:
         term = cat["terms"][tk]
-        label = term["btn_es"] if lg == "es" else term["btn_en"]
+        label = contenido.termino_btn(tk, lg, term["btn_es"] if lg == "es" else term["btn_en"])
         rows.append([InlineKeyboardButton(label, callback_data=tk)])
     rows.append([InlineKeyboardButton("🔙 Diccionario" if lg == "es" else "🔙 Dictionary",
                                       callback_data="dictionary")])
@@ -1110,7 +1117,7 @@ def dict_search_results_keyboard(keys, lg):
     for tk in keys[:12]:
         cat = TERM_TO_CAT[tk]
         term = cat["terms"][tk]
-        label = term["btn_es"] if lg == "es" else term["btn_en"]
+        label = contenido.termino_btn(tk, lg, term["btn_es"] if lg == "es" else term["btn_en"])
         rows.append([InlineKeyboardButton(label, callback_data=tk)])
     rows.append([InlineKeyboardButton("🔍 Buscar otro" if lg == "es" else "🔍 Search again", callback_data="dict_search"),
                  InlineKeyboardButton("📖 Diccionario" if lg == "es" else "📖 Dictionary", callback_data="dictionary")])
@@ -1141,7 +1148,7 @@ def search_terms(qtext):
 
 async def show_term(query, lg, tk):
     cat = TERM_TO_CAT[tk]
-    text = cat["terms"][tk][lg]
+    text = contenido.termino(tk, lg, cat["terms"][tk][lg])
     await edit_md(query, text, dict_term_keyboard(cat, lg))
     return DICT_CAT
 
@@ -1213,7 +1220,8 @@ async def dict_search_input(update, context):
     if len(keys) == 1:
         tk = keys[0]
         cat = TERM_TO_CAT[tk]
-        await reply_md(update, cat["terms"][tk][lg], dict_term_keyboard(cat, lg))
+        await reply_md(update, contenido.termino(tk, lg, cat["terms"][tk][lg]),
+                       dict_term_keyboard(cat, lg))
         return DICT_CAT
     head = (f"🔍 Encontré {len(keys)} resultados:" if lg == "es" else f"🔍 Found {len(keys)} results:")
     await reply_md(update, head, dict_search_results_keyboard(keys, lg))
@@ -1383,13 +1391,15 @@ def quiz_q_text(qidx, i, n, lg):
     q = content_quiz.QUESTIONS[qidx]
     head = (f"🧠 *Quiz Bitcoin* ({i+1}/{n})\n\n" if lg == "es"
             else f"🧠 *Bitcoin Quiz* ({i+1}/{n})\n\n")
-    return head + (q["q_es"] if lg == "es" else q["q_en"])
+    return head + contenido.texto(f"quiz.{qidx}.q", lg, q["q_es"] if lg == "es" else q["q_en"])
 
 
-def quiz_options_keyboard(q, lg):
+def quiz_options_keyboard(q, lg, qidx):
     opts = q["options_es"] if lg == "es" else q["options_en"]
     letters = "ABCD"
-    rows = [[InlineKeyboardButton(f"{letters[i]}) {opts[i]}", callback_data=f"quiz_ans_{i}")]
+    rows = [[InlineKeyboardButton(
+                f"{letters[i]}) " + contenido.texto(f"quiz.{qidx}.opt{i}", lg, opts[i]),
+                callback_data=f"quiz_ans_{i}")]
             for i in range(len(opts))]
     rows.append([InlineKeyboardButton("🔙 Menú" if lg == "es" else "🔙 Menu", callback_data="back_main")])
     return InlineKeyboardMarkup(rows)
@@ -1400,7 +1410,7 @@ async def start_quiz(query, context, lg):
     order = random.sample(range(len(content_quiz.QUESTIONS)), n)
     context.user_data["quiz"] = {"order": order, "i": 0, "score": 0}
     q = content_quiz.QUESTIONS[order[0]]
-    await edit_md(query, quiz_q_text(order[0], 0, n, lg), quiz_options_keyboard(q, lg))
+    await edit_md(query, quiz_q_text(order[0], 0, n, lg), quiz_options_keyboard(q, lg, order[0]))
     return QUIZ
 
 
@@ -1461,7 +1471,7 @@ async def quiz_callback(update, context):
             return QUIZ
         qidx = st["order"][st["i"]]
         await edit_md(query, quiz_q_text(qidx, st["i"], n, lg),
-                      quiz_options_keyboard(content_quiz.QUESTIONS[qidx], lg))
+                      quiz_options_keyboard(content_quiz.QUESTIONS[qidx], lg, qidx))
         return QUIZ
 
     return QUIZ
@@ -1980,18 +1990,48 @@ async def init_db(pool):
                 created_at TIMESTAMP DEFAULT NOW()
             )
         """)
+        # Campos de administración. Se añaden con IF NOT EXISTS para que una base
+        # que ya existe se actualice sola, sin migraciones a mano.
+        # Ninguno guarda QUÉ hace el usuario: solo si se le cerró la puerta, si
+        # él cerró la suya, si sigue el canal y cuándo se le vio por última vez.
+        for columna, tipo in (("bloqueado", "BOOLEAN DEFAULT FALSE"),
+                              ("bloqueo_motivo", "TEXT"),
+                              ("bloqueo_fecha", "TIMESTAMP"),
+                              ("nos_bloqueo", "BOOLEAN DEFAULT FALSE"),
+                              ("en_canal", "BOOLEAN"),
+                              ("visto", "TIMESTAMP")):
+            await conn.execute(
+                f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
 async def upsert_user(pool, user, lang_code=None):
     async with pool.acquire() as conn:
         await conn.execute("""
-            INSERT INTO users (chat_id, username, first_name, language)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO users (chat_id, username, first_name, language, visto)
+            VALUES ($1, $2, $3, $4, NOW())
             ON CONFLICT (chat_id) DO UPDATE SET
                 username   = EXCLUDED.username,
                 first_name = EXCLUDED.first_name,
-                language   = COALESCE(EXCLUDED.language, users.language)
+                language   = COALESCE(EXCLUDED.language, users.language),
+                visto      = NOW()
         """, user.id, user.username, user.first_name, lang_code)
+
+
+async def esta_bloqueado(pool, chat_id) -> bool:
+    """¿El admin le cerró la puerta a este usuario?
+
+    Se consulta en cada mensaje: por eso es una sola lectura por clave primaria.
+    Ante cualquier fallo devuelve False — un problema de base de datos no debe
+    dejar fuera a todo el mundo.
+    """
+    if pool is None:
+        return False
+    try:
+        async with pool.acquire() as conn:
+            return bool(await conn.fetchval(
+                "SELECT bloqueado FROM users WHERE chat_id = $1", chat_id))
+    except Exception:
+        return False
 
 
 async def get_all_chat_ids(pool):
@@ -2069,6 +2109,37 @@ async def alert_loop(app):
                 await asyncio.sleep(0.05)
         except Exception as e:
             logger.warning("alert_loop: %s", e)
+
+
+async def puerta(update, context):
+    """Corre ANTES que todo: si el admin bloqueó a este usuario, aquí se acaba.
+
+    Va en el grupo -1 a propósito. `track_user` está en el grupo 1, o sea DESPUÉS
+    de la conversación: bloquear allí no serviría de nada porque el bot ya habría
+    respondido.
+
+    Se avisa al bloqueado en vez de ignorarlo en silencio: el silencio parece una
+    avería y hace que insista.
+    """
+    user = update.effective_user
+    pool = context.application.bot_data.get("db_pool")
+    if not (user and pool) or user.is_bot:
+        return
+    if not await esta_bloqueado(pool, user.id):
+        return
+    lg = context.user_data.get("lang", "es")
+    aviso = ("🚫 Tu acceso a este bot está bloqueado.\n\nSi crees que es un error, "
+             "escribe a SatoshiIntelbot@proton.me" if lg == "es" else
+             "🚫 Your access to this bot is blocked.\n\nIf you think this is a mistake, "
+             "write to SatoshiIntelbot@proton.me")
+    try:
+        if update.callback_query:
+            await update.callback_query.answer(aviso, show_alert=True)
+        elif update.message:
+            await update.message.reply_text(aviso)
+    except Exception:
+        pass
+    raise ApplicationHandlerStop
 
 
 async def track_user(update, context):
@@ -2347,7 +2418,7 @@ async def quiz_command(update, context):
     order = random.sample(range(len(content_quiz.QUESTIONS)), n)
     context.user_data["quiz"] = {"order": order, "i": 0, "score": 0}
     q = content_quiz.QUESTIONS[order[0]]
-    await reply_md(update, quiz_q_text(order[0], 0, n, lg), quiz_options_keyboard(q, lg))
+    await reply_md(update, quiz_q_text(order[0], 0, n, lg), quiz_options_keyboard(q, lg, order[0]))
     return QUIZ
 
 
@@ -2412,6 +2483,11 @@ async def post_init(app):
             logger.info("✅ Base de datos conectada (%s usuarios).", n)
             asyncio.create_task(alert_loop(app))  # loop de alertas de precio
             logger.info("🔔 Loop de alertas iniciado.")
+            # Textos editables desde el panel: se releen solos cada pocos segundos
+            await contenido.crear_tabla(pool)
+            contenido.usar_pool(pool)
+            await contenido.refrescar()
+            asyncio.create_task(contenido.bucle())
         except Exception as e:
             logger.warning("⚠️ No pude conectar a la base de datos: %s", e)
     else:
@@ -2502,6 +2578,8 @@ def main():
     )
 
     # Rastrea QUIÉN usa el bot (para /broadcast). Corre después del manejo normal.
+    # La puerta va en el grupo -1: corre antes que la conversación.
+    app.add_handler(TypeHandler(Update, puerta), group=-1)
     app.add_handler(TypeHandler(Update, track_user), group=1)
     app.add_handler(conv)
     logger.info("🚀 Bitcoin Bot iniciado. Esperando mensajes...")

@@ -36,6 +36,8 @@ try:
 except ImportError:
     pass
 
+import txcache
+
 logger = logging.getLogger(__name__)
 
 # Direcciones que ya tumbaron el índice: no se vuelven a pedir al nodo mientras
@@ -142,9 +144,24 @@ class _Conn:
                     if not linea:
                         raise ConnectionError("Electrs cerró la conexión")
                     resp = json.loads(linea)
+                    # Segunda red: si el id no es el nuestro, estamos leyendo la
+                    # respuesta de otra petición. Antes esto pasaba callado y el
+                    # bot enseñaba datos de una dirección distinta.
+                    if resp.get("id") != self._id:
+                        await self.close()
+                        raise ConnectionError(
+                            f"respuesta desfasada (esperaba id {self._id}, llegó {resp.get('id')})")
                     if "error" in resp and resp["error"]:
                         raise RuntimeError(f"Electrs: {resp['error']}")
                     return resp.get("result")
+                except asyncio.CancelledError:
+                    # MISMO PELIGRO QUE EL TIMEOUT, y este era el que se colaba:
+                    # `Pool.call` devuelve la conexión al pool en su `finally`
+                    # aunque la hayan cancelado, así que la respuesta a medio
+                    # camino se la comía el SIGUIENTE usuario. Cerrar es la única
+                    # forma de garantizar que nadie lee lo que no pidió.
+                    await self.close()
+                    raise
                 except (asyncio.TimeoutError, TimeoutError):
                     # CRÍTICO: al agotarse el tiempo la respuesta sigue de camino.
                     # Si dejáramos la conexión abierta, la siguiente petición leería
@@ -262,8 +279,19 @@ class Node:
         return hist
 
     async def _salidas_hacia(self, txid: str, addr: str) -> int:
-        """Sats que esta tx pagó a la dirección."""
+        """Sats que esta tx pagó a la dirección.
+
+        Aquí es donde se iba el tiempo: una llamada al nodo por CADA transacción
+        del historial. Una tx confirmada no cambia nunca, así que la primera vez
+        se descarga y a partir de ahí sale de la caché en disco.
+        """
+        guardado = txcache.recibido_por(txid, addr)
+        if guardado is not None:
+            return guardado
         tx = await self.raw_tx(txid)
+        # Solo se guardan las confirmadas: una sin confirmar aún puede cambiar.
+        if tx.get("confirmations", 0) > 0 or tx.get("blockhash"):
+            txcache.guardar(txid, tx.get("vout", []))
         total = 0
         for o in tx.get("vout", []):
             spk = o.get("scriptPubKey") or {}

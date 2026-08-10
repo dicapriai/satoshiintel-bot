@@ -21,7 +21,10 @@ PATRONES = {
     "token de Telegram":  re.compile(r"\b\d{9,10}:[A-Za-z0-9_-]{35}\b"),
     "clave Fernet":       re.compile(r"\b[A-Za-z0-9_-]{43}=\B"),
     "IP de Tailscale":    re.compile(r"\b100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d+\.\d+\b"),
-    "host .ts.net":       re.compile(r"[\w.-]+\.ts\.net"),
+    # Un tailnet de verdad es hexadecimal al azar (tail6ae859) y nunca lleva
+    # "ejemplo" ni "prueba" dentro; los ejemplos de los tests sí.
+    "host .ts.net":       re.compile(
+        r"\b(?!(?:[\w.-]*(?:ejemplo|example|prueba|test|demo)))[\w.-]+\.ts\.net"),
     "nombre del tailnet": re.compile(r"\btail[0-9a-f]{8,}\b"),
     "el servidor":        re.compile(r"\bsrv\d{6,}\b"),
     # El nombre del usuario NO se escribe aquí (este archivo también se

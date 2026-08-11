@@ -5,7 +5,7 @@ CATEGORY = {
 }
 
 ORDER = ["edu_e1", "edu_e2", "edu_e3", "edu_e4", "edu_e5",
-         "edu_e6", "edu_e7", "edu_e8"]
+         "edu_e6", "edu_e7", "edu_e8", "edu_e9"]
 
 MODULES = {
     "edu_e1": {
@@ -379,6 +379,54 @@ One caveat: if your decoy wallet has transaction *history*, you are telling him 
 *If he attacks the passphrase:* he tries millions of candidates per second on his own machine and compares against *every funded Bitcoin address* at once. He doesn't need to know yours.
 
 *Economics protect you:* he holds millions of seeds. He goes for the easy 99%, the ones with no passphrase.
+
+_Don't trust, verify._""",
+    },
+    "edu_e9": {
+        "btn_es": "🍴 Forks y splits: qué hacer",
+        "btn_en": "🍴 Forks and splits: what to do",
+        "es": """*Forks y divisiones de cadena: qué hacer*
+
+Cada cierto tiempo alguien propone cambiar las reglas de Bitcoin. Como nadie manda, hay que ponerse de acuerdo, y ahí empieza el ruido.
+
+*Los dos tipos:*
+• _Soft fork_ — reglas más estrictas. Los nodos viejos siguen aceptando la cadena. Es compatible hacia atrás.
+• _Hard fork_ — reglas incompatibles. Si no todos actualizan, la cadena se parte en dos.
+
+Cuando un grupo activa reglas que el resto no acepta, aparece una *división de cadena*: dos redes con la misma historia hasta cierto bloque, y distintas a partir de ahí. Suele pasar que la cadena con poco poder de minado avanza lentísimo y queda atrás.
+
+*Qué haces tú, que solo quieres tus sats a salvo:*
+• *No hagas nada apurado.* Si tienes tus llaves, tus monedas existen en ambas cadenas. No se pierden.
+• No muevas fondos durante los primeros días de un split. Espera a que se aclare.
+• No cambies el software de tu wallet ni de tu nodo por presión de redes sociales.
+• Si tienes monedas en un exchange, quien decide es el exchange, no tú. Otra razón para la autocustodia.
+
+🚨 *La estafa de siempre:*
+En cada fork aparecen webs y mensajes que dicen "reclama tus monedas del fork, pon aquí tu frase semilla". *Es robo, siempre, sin excepción.* Ninguna cadena legítima te pide tu semilla para nada.
+
+En 2017 se robaron fortunas exactamente así. La regla no cambia: tu semilla no se escribe en ningún lado.
+
+_No confíes, verifica._""",
+        "en": """*Forks and chain splits: what to do*
+
+Every now and then someone proposes changing Bitcoin's rules. Since nobody is in charge, people have to agree, and that's where the noise starts.
+
+*The two types:*
+• _Soft fork_ — stricter rules. Old nodes still accept the chain. It is backwards compatible.
+• _Hard fork_ — incompatible rules. If not everyone upgrades, the chain splits in two.
+
+When a group activates rules the rest don't accept, a *chain split* appears: two networks sharing the same history up to a block, and different after it. Usually the chain with little hash power moves very slowly and falls behind.
+
+*What you do, when you just want your sats safe:*
+• *Don't rush anything.* If you hold your keys, your coins exist on both chains. Nothing is lost.
+• Don't move funds during the first days of a split. Wait for things to settle.
+• Don't switch your wallet or node software because of social media pressure.
+• If your coins sit on an exchange, the exchange decides, not you. One more reason for self-custody.
+
+🚨 *The usual scam:*
+In every fork, websites and messages appear saying "claim your fork coins, enter your seed phrase here". *That is theft, always, no exceptions.* No legitimate chain ever asks for your seed.
+
+In 2017 fortunes were stolen exactly that way. The rule doesn't change: your seed is never typed anywhere.
 
 _Don't trust, verify._""",
     },

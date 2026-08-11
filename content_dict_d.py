@@ -12,6 +12,7 @@ CATEGORIES = [
             "t_bip_bip340",
             "t_bip_bip341",
             "t_bip_bip85",
+            "t_bip_bip110",
         ],
         "terms": {
             "t_bip_bip32": {
@@ -221,6 +222,44 @@ Lets you derive many child seed phrases from a single master seed, like a backup
 
 🎓 Level: Advanced
 🔗 Related: BIP32 · BIP39 · Seed Phrase""",
+            },
+            "t_bip_bip110": {
+                "btn_es": "🚧 BIP110",
+                "btn_en": "🚧 BIP110",
+                "es": """🚧 *BIP110 Reduced Data Temporary Softfork*
+
+Propuesta de soft fork temporal, de un año, para limitar los datos arbitrarios en la cadena y frenar las inscripciones tipo Ordinals y Runes.
+
+📊 *Qué limita:*
+• 256 bytes en ciertos campos de datos
+• 83 bytes en las salidas OP_RETURN
+• Restringe algunas funciones de Taproot
+
+⚔️ *Muy discutido:*
+• A favor: reduce el spam y la carga de la red
+• En contra: es censura y sienta un precedente peligroso
+
+En agosto de 2026 entró en señalización obligatoria con menos del 3% de apoyo de los mineros, muy lejos del 55% necesario. Bitcoin Core no lo adoptó y sus partidarios lo activaron por su cuenta, lo que provocó una división de cadena con muy poco poder de minado.
+
+🎓 Nivel: Avanzado
+🔗 Relacionado: Soft Fork · OP_RETURN · Taproot · UASF""",
+                "en": """🚧 *BIP110 Reduced Data Temporary Softfork*
+
+A proposed one year temporary soft fork to limit arbitrary data on chain and curb Ordinals and Runes style inscriptions.
+
+📊 *What it limits:*
+• 256 bytes in certain data fields
+• 83 bytes in OP_RETURN outputs
+• Restricts some Taproot functions
+
+⚔️ *Highly contested:*
+• For: it reduces spam and network load
+• Against: it is censorship and sets a dangerous precedent
+
+In August 2026 it entered mandatory signalling with under 3% miner support, far below the 55% required. Bitcoin Core did not adopt it and its supporters activated it on their own, causing a chain split with very little hash power behind it.
+
+🎓 Level: Advanced
+🔗 Related: Soft Fork · OP_RETURN · Taproot · UASF""",
             },
         },
     },

@@ -104,6 +104,25 @@ Python 3.12 · `python-telegram-bot` en modo polling · PostgreSQL · sin framew
 | `content_edu_*.py` | Las 30 lecciones |
 | `content_dict_*.py` | El diccionario de 90 términos |
 
+En producción corre en un **contenedor Docker** en un VPS propio, contra un nodo
+Bitcoin propio. El proyecto de Docker se llama `satoshiintel` (por el `name:` del
+`docker-compose.yml`), y estos tres detalles del compose son deliberados:
+
+- `network_mode: host` — para alcanzar Postgres en `127.0.0.1` y el Electrs del
+  nodo por la red privada. Sin eso, el contenedor no llega a ninguno de los dos.
+- `volumes: /opt/satoshiintel/data` — la caché de transacciones vive fuera del
+  contenedor; si no, se perdería en cada reconstrucción.
+- `user:` — el contenedor NO corre como root, sino con el usuario del servicio.
+
+Manejo en el servidor, desde la carpeta del bot:
+
+```bash
+docker compose ps              # ¿está vivo?
+docker compose logs -f         # log en vivo
+docker compose up -d --build   # aplicar cambios de código
+docker compose down            # pararlo
+```
+
 La configuración va por variables de entorno (ver `.env.example`). **Sin un nodo propio
 configurado, el bot funciona igual usando la API pública de mempool.space** — que es lo
 que hará quien clone este repositorio.

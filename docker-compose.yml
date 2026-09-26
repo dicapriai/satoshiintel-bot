@@ -1,0 +1,18 @@
+name: satoshiintel        # así aparece el proyecto en el panel de Hostinger, no "app"
+services:
+  bot:
+    build: .
+    env_file: .env          # los secretos entran como variables de entorno
+    # El bot habla con Postgres en 127.0.0.1 y con Electrs del nodo por Tailscale:
+    # sin la red del anfitrión no alcanzaría ninguno de los dos.
+    network_mode: host
+    # Mismo usuario que usaba con systemd, para que los archivos de data/ no
+    # cambien de dueño (uid:gid de satoshiintel en el VPS).
+    user: "997:986"
+    volumes:
+      # La caché de transacciones vive FUERA del contenedor: si no, se perdería
+      # en cada 'up --build'.
+      - /opt/satoshiintel/data:/opt/satoshiintel/data
+    environment:
+      TXCACHE_DB: /opt/satoshiintel/data/txcache.db
+    restart: always         # se levanta solo si se cae o si reinicia el VPS

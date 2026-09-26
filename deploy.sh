@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Sube el código al VPS y reinicia el bot gratis. Se ejecuta DESDE EL MAC.
-# Uso: ./deploy.sh
+# Sube el código al VPS y relevanta el bot con DOCKER. Se ejecuta DESDE EL MAC.
+# Uso: VPS=root@mi-servidor ./deploy.sh
 set -euo pipefail
 
 # El servidor NO se escribe aquí (repo público). Se pasa al ejecutar:
@@ -15,5 +15,5 @@ rsync -az --delete \
   --exclude '*.db' --exclude '.env' --exclude '.DS_Store' \
   ./ "$VPS:/opt/satoshiintel/app/"
 
-echo "==> Reiniciando servicio"
-ssh "$VPS" 'systemctl restart satoshiintel && sleep 4 && systemctl is-active satoshiintel && journalctl -u satoshiintel -n 15 --no-pager'
+echo "==> Reconstruyendo el contenedor"
+ssh "$VPS" 'cd /opt/satoshiintel/app && docker compose up -d --build && sleep 6 && docker compose ps && echo "--- logs ---" && docker compose logs --tail 8'
